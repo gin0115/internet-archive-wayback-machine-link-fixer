@@ -615,7 +615,7 @@ class Settings {
 	 *
 	 * @since 1.4.0
 	 *
-	 * @param string $key     The option key.
+	 * @param string $key           The option key.
 	 * @param mixed  $default_value The default value if not set.
 	 *
 	 * @return mixed
