@@ -19,6 +19,7 @@ use Internet_Archive\Wayback_Machine_Link_Fixer\Wayback_Machine\Snapshot_Client;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Wayback_Machine\Link_Checker_Client;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Wayback_Machine\HTTP_Client\HTTP_Snapshot_Client;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Wayback_Machine\HTTP_Client\HTTP_Link_Checker_Client;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Multisite;
 
 // region
 
@@ -97,9 +98,16 @@ function iawmlf_get_plugin_instance(): Plugin {
  * @since   1.0.0
  * @version 1.0.0
  *
+ * @param boolean|null $network_wide Whether the plugin is being activated network wide.
+ *
  * @return  void
  */
-function iawmlf_activate(): void {
+function iawmlf_activate( ?bool $network_wide = null ): void {
+
+	// Setup multisite if needed.
+	if ( is_multisite() ) {
+		Multisite::setup( $network_wide );
+	}
 
 	// Run migrations.
 	Migrations::up();

@@ -12,6 +12,8 @@ declare( strict_types=1 );
 
 namespace Internet_Archive\Wayback_Machine_Link_Fixer\Util;
 
+use Internet_Archive\Wayback_Machine_Link_Fixer\Settings\Settings;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -34,5 +36,20 @@ class Environmental {
 		}
 
 		return apply_filters( 'iawmlf_is_production_environment', $is_production );
+	}
+
+	/**
+	 * Get the current multisite links table mode.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @return 'shared'|'separate'|null Returns the links table mode or null if not set.
+	 */
+	public static function get_links_table_mode() {
+		if ( ! is_multisite() ) {
+			return null;
+		}
+
+		return Settings::get_multisite_links_table_mode();
 	}
 }
