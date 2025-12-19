@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace Internet_Archive\Wayback_Machine_Link_Fixer\Multisite;
 
-
 use Internet_Archive\Wayback_Machine_Link_Fixer\Settings\Settings;
 
 if ( ! defined( 'ABSPATH' ) ) {

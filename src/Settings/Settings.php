@@ -577,6 +577,8 @@ class Settings {
 	 * @since 1.4.0
 	 *
 	 * @param 'shared'|'separate' $mode The mode to set.
+	 *
+	 * @return void
 	 */
 	public static function set_multisite_links_table_mode( string $mode ): void {
 		if ( ! in_array( $mode, array( Multisite::SHARED_LINKS_TABLE_MODE, Multisite::SEPARATE_LINKS_TABLE_MODE ), true ) ) {
@@ -614,13 +616,13 @@ class Settings {
 	 * @since 1.4.0
 	 *
 	 * @param string $key     The option key.
-	 * @param mixed  $default The default value if not set.
+	 * @param mixed  $default_value The default value if not set.
 	 *
 	 * @return mixed
 	 */
-	private static function get_multisite_aware_option( string $key, $default = false ) {
+	private static function get_multisite_aware_option( string $key, $default_value = false ) {
 		return ( ! is_multisite() || Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE )
-			? get_option( $key, $default )
+			? get_option( $key, $default_value )
 			: get_network_option( get_current_network_id(), $key, $default );
 	}
 
