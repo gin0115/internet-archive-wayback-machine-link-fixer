@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace Internet_Archive\Wayback_Machine_Link_Fixer\Settings;
 
 use Internet_Archive\Wayback_Machine_Link_Fixer\Util\Environmental;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Multisite;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Migration\Abstract_Migration;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Event\Check_Archive_Services_Online_Event;
 
@@ -66,6 +67,9 @@ class Settings {
 	public const ROUTINELY_UPDATE_WAYBACK_MACHINE          = self::SETTINGS_PREFIX . 'routinely_update_wayback_machine';
 	public const ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL = self::SETTINGS_PREFIX . 'routinely_update_wayback_machine_interval';
 
+	// Multisite options.
+	public const MULTISITE_LINKS_TABLE_MODE = self::SETTINGS_PREFIX . 'multisite_links_table_mode';
+
 	/**
 	 * Gets the link table name.
 	 *
@@ -75,7 +79,15 @@ class Settings {
 	 */
 	public static function get_link_table_name(): string {
 		global $wpdb;
-		return $wpdb->prefix . self::LINK_TABLE;
+
+		// If not multisite, return the normal table name.
+		if ( ! is_multisite() ) {
+			return $wpdb->prefix . self::LINK_TABLE;
+		}
+
+		return Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE
+			? $wpdb->get_blog_prefix( get_current_blog_id() ) . self::LINK_TABLE
+			: $wpdb->base_prefix . self::LINK_TABLE;
 	}
 
 	/**
@@ -88,7 +100,7 @@ class Settings {
 	 * @return boolean
 	 */
 	public static function is_link_processing_enabled( bool $default_value = false ): bool {
-		return (bool) get_option( self::PROCESS_LINKS, $default_value );
+		return (bool) self::get_multisite_aware_option( self::PROCESS_LINKS, $default_value );
 	}
 
 	/**
@@ -99,7 +111,7 @@ class Settings {
 	 * @return  string[]
 	 */
 	public static function get_allowed_post_types(): array {
-		return array_map( 'esc_html', (array) get_option( self::ALLOWED_POST_TYPES, array( 'page', 'post' ) ) );
+		return array_map( 'esc_html', (array) self::get_multisite_aware_option( self::ALLOWED_POST_TYPES, array( 'page', 'post' ) ) );
 	}
 
 	/**
@@ -156,7 +168,7 @@ class Settings {
 	 * @return string[]
 	 */
 	public static function get_link_exclusions(): array {
-		$links = array_map( 'esc_html', (array) get_option( self::LINK_EXCLUSIONS, array() ) );
+		$links = array_map( 'esc_html', (array) self::get_multisite_aware_option( self::LINK_EXCLUSIONS, array() ) );
 		return apply_filters( 'iawmlf_link_exclusions', $links );
 	}
 
@@ -183,7 +195,7 @@ class Settings {
 	 * @return integer
 	 */
 	public static function get_link_check_duration(): int {
-		$duration = absint( get_option( self::LINK_CHECK_DURATION_IN_DAYS, 3 ) );
+		$duration = absint( self::get_multisite_aware_option( self::LINK_CHECK_DURATION_IN_DAYS, 3 ) );
 		return absint( apply_filters( 'iawmlf_link_check_duration_in_days', $duration ) );
 	}
 
@@ -213,7 +225,7 @@ class Settings {
 		if ( ! self::is_link_processing_enabled( $default_value ) ) {
 			return false;
 		}
-		return (bool) get_option( self::SCAN_EXISTING_POSTS, $default_value );
+		return (bool) self::get_multisite_aware_option( self::SCAN_EXISTING_POSTS, $default_value );
 	}
 
 	/**
@@ -224,7 +236,7 @@ class Settings {
 	 * @return integer
 	 */
 	public static function get_failed_count(): int {
-		$retries = absint( get_option( self::MINIMUM_CHECKS_BEFORE_BROKEN, 3 ) );
+		$retries = absint( self::get_multisite_aware_option( self::MINIMUM_CHECKS_BEFORE_BROKEN, 3 ) );
 		return absint( apply_filters( 'iawmlf_failed_count', $retries ) );
 	}
 
@@ -271,7 +283,7 @@ class Settings {
 	 * @return string
 	 */
 	public static function get_fixer_option( string $default_value = self::FIXER_OPTION_REPLACE_LINK ): string {
-		return esc_attr( get_option( self::FIXER_OPTION, $default_value ) );
+		return esc_attr( self::get_multisite_aware_option( self::FIXER_OPTION, $default_value ) );
 	}
 
 	/**
@@ -314,7 +326,7 @@ class Settings {
 	 * @return boolean
 	 */
 	public static function add_own_links( bool $default_value = false ): bool {
-		$allow = (bool) get_option( self::ALLOW_OWN_CONTENT_SUBMISSIONS, $default_value );
+		$allow = (bool) self::get_multisite_aware_option( self::ALLOW_OWN_CONTENT_SUBMISSIONS, $default_value );
 
 		// If not production, force false.
 		if ( ! Environmental::is_production() ) {
@@ -337,7 +349,7 @@ class Settings {
 	public static function own_link_allowed_post_types(): array {
 		return apply_filters(
 			'iawmlf_own_content_post_types',
-			array_map( 'esc_html', (array) get_option( self::ALLOWED_OWN_CONTENT_POST_TYPES, array( 'post', 'page' ) ) )
+			array_map( 'esc_html', (array) self::get_multisite_aware_option( self::ALLOWED_OWN_CONTENT_POST_TYPES, array( 'post', 'page' ) ) )
 		);
 	}
 
@@ -353,7 +365,7 @@ class Settings {
 	public static function own_link_routinely_update( bool $default_value = false ): bool {
 		return (bool) apply_filters(
 			'iawmlf_routinely_update_wayback_machine',
-			(bool) get_option( self::ROUTINELY_UPDATE_WAYBACK_MACHINE, $default_value )
+			(bool) self::get_multisite_aware_option( self::ROUTINELY_UPDATE_WAYBACK_MACHINE, $default_value )
 		);
 	}
 
@@ -369,7 +381,7 @@ class Settings {
 		$interval = absint(
 			apply_filters(
 				'iawmlf_routinely_update_wayback_machine_interval',
-				get_option( self::ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL, $default )
+				self::get_multisite_aware_option( self::ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL, $default )
 			)
 		);
 
@@ -460,7 +472,7 @@ class Settings {
 	 * @return string
 	 */
 	public static function get_setup_wizard_step( string $default_value = 'step-1' ): string {
-		return (string) get_option( self::SETUP_WIZARD_STEP_KEY, $default_value );
+		return (string) self::get_multisite_aware_option( self::SETUP_WIZARD_STEP_KEY, $default_value );
 	}
 
 	/**
@@ -473,7 +485,7 @@ class Settings {
 	 * @return void
 	 */
 	public static function update_setup_wizard_step( string $step ): void {
-		update_option( self::SETUP_WIZARD_STEP_KEY, $step );
+		self::update_multisite_aware_option( self::SETUP_WIZARD_STEP_KEY, $step );
 	}
 
 	/**
@@ -484,7 +496,7 @@ class Settings {
 	 * @return boolean
 	 */
 	public static function is_wizard_completed(): bool {
-		return (bool) get_option( self::SETUP_WIZARD_COMPLETED_KEY, false );
+		return (bool) self::get_multisite_aware_option( self::SETUP_WIZARD_COMPLETED_KEY, false );
 	}
 
 	/**
@@ -497,7 +509,7 @@ class Settings {
 	 * @return void
 	 */
 	public static function set_wizard_completed( bool $completed ): void {
-		update_option( self::SETUP_WIZARD_COMPLETED_KEY, $completed );
+		self::update_multisite_aware_option( self::SETUP_WIZARD_COMPLETED_KEY, $completed );
 	}
 
 	/**
@@ -508,7 +520,7 @@ class Settings {
 	 * @return string|null
 	 */
 	public static function get_onboarding_date(): ?string {
-		$date = get_option( self::ONBOARDING_DATE_KEY, null );
+		$date = self::get_multisite_aware_option( self::ONBOARDING_DATE_KEY, null );
 		return is_string( $date ) ? $date : null;
 	}
 
@@ -522,7 +534,7 @@ class Settings {
 	 * @return void
 	 */
 	public static function set_onboarding_date( string $date ): void {
-		update_option( self::ONBOARDING_DATE_KEY, $date );
+		self::update_multisite_aware_option( self::ONBOARDING_DATE_KEY, $date );
 	}
 
 	/**
@@ -540,7 +552,7 @@ class Settings {
 			$status = self::ONBOARDING_PENDING_OPTION;
 		}
 
-		update_option( self::POST_ACTIVATION_ONBOARDING_KEY, $status, false );
+		self::update_multisite_aware_option( self::POST_ACTIVATION_ONBOARDING_KEY, $status, false );
 	}
 
 	/**
@@ -553,10 +565,95 @@ class Settings {
 	 * @return string
 	 */
 	public static function get_onboarding_status( string $default_value = self::ONBOARDING_COMPLETED_OPTION ): string {
-		$state = get_option( self::POST_ACTIVATION_ONBOARDING_KEY, $default_value );
+		$state = self::get_multisite_aware_option( self::POST_ACTIVATION_ONBOARDING_KEY, $default_value );
 		return in_array( $state, array( self::ONBOARDING_COMPLETED_OPTION, self::ONBOARDING_PENDING_OPTION ), true )
 			? $state
 			: self::ONBOARDING_PENDING_OPTION;
+	}
+
+	/**
+	 * Sets the multisite links table mode.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @param 'shared'|'separate' $mode The mode to set.
+	 */
+	public static function set_multisite_links_table_mode( string $mode ): void {
+		if ( ! in_array( $mode, array( Multisite::SHARED_LINKS_TABLE_MODE, Multisite::SEPARATE_LINKS_TABLE_MODE ), true ) ) {
+			$mode = Multisite::SHARED_LINKS_TABLE_MODE;
+		}
+
+		if ( is_multisite() ) {
+			update_network_option( get_current_network_id(), self::MULTISITE_LINKS_TABLE_MODE, $mode );
+		} else {
+			update_option( self::MULTISITE_LINKS_TABLE_MODE, $mode );
+		}
+	}
+
+	/**
+	 * Gets the multisite links table mode.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @return 'shared'|'separate'
+	 */
+	public static function get_multisite_links_table_mode(): string {
+		$default = Multisite::SHARED_LINKS_TABLE_MODE;
+		$mode    = is_multisite()
+			? get_network_option( get_current_network_id(), self::MULTISITE_LINKS_TABLE_MODE, $default )
+			: get_option( self::MULTISITE_LINKS_TABLE_MODE, $default );
+
+		return in_array( $mode, array( Multisite::SHARED_LINKS_TABLE_MODE, Multisite::SEPARATE_LINKS_TABLE_MODE ), true )
+			? $mode
+			: $default;
+	}
+
+	/**
+	 * Gets an option with multisite mode awareness.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @param string $key     The option key.
+	 * @param mixed  $default The default value if not set.
+	 *
+	 * @return mixed
+	 */
+	private static function get_multisite_aware_option( string $key, $default = false ) {
+		return ( ! is_multisite() || Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE )
+			? get_option( $key, $default )
+			: get_network_option( get_current_network_id(), $key, $default );
+	}
+
+	/**
+	 * Updates an option with multisite mode awareness.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @param string $key      The option key.
+	 * @param mixed  $value    The value to set.
+	 * @param mixed  $autoload Whether to autoload the option.
+	 *
+	 * @return boolean
+	 */
+	private static function update_multisite_aware_option( string $key, $value, $autoload = null ) {
+		return ( ! is_multisite() || Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE )
+			? update_option( $key, $value, $autoload )
+			: update_network_option( get_current_network_id(), $key, $value );
+	}
+
+	/**
+	 * Deletes an option with multisite mode awareness.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @param string $key The option key.
+	 *
+	 * @return boolean
+	 */
+	private static function delete_multisite_aware_option( string $key ) {
+		return ( ! is_multisite() || Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE )
+			? delete_option( $key )
+			: delete_network_option( get_current_network_id(), $key );
 	}
 
 	/**
