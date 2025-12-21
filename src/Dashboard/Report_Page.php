@@ -56,6 +56,11 @@ class Report_Page {
 	 * @return string
 	 */
 	public static function get_page_url(): string {
+		// Use network admin URL if we're in network admin context.
+		if ( is_network_admin() ) {
+			return network_admin_url( 'admin.php?page=' . self::SLUG );
+		}
+
 		return admin_url( 'admin.php?page=' . self::SLUG );
 	}
 
@@ -363,12 +368,12 @@ class Report_Page {
 	 */
 	private function render_single_page(): void {
 
-		// Get the link.
+		// Get the link ID.
 		$link_id = isset( $_GET['iawmlf_link_id'] ) // phpcs:ignore WordPress.Security.NonceVerification.Recommended, Can be linked, so no nonce possible.
 			? absint( wp_unslash( $_GET['iawmlf_link_id'] ) ) // phpcs:ignore WordPress.Security.NonceVerification.Recommended, Can be linked, so no nonce possible
 			: 0;
 
-		// If the link does not exist, show an error.
+		// Validate link ID.
 		if ( 0 === $link_id ) {
 			printf(
 				'<div class="notice notice-error"><p>%s</p></div>',
@@ -377,10 +382,10 @@ class Report_Page {
 			return;
 		}
 
-		// Get the link from the repository.
+		// Get the link from repository.
 		$link = $this->link_repository->find_by_id( $link_id );
 
-		// If the link is not valid, show an error.
+		// Validate link exists.
 		if ( ! $link ) {
 			printf(
 				'<div class="notice notice-error"><p>%s</p></div>',
@@ -388,13 +393,112 @@ class Report_Page {
 			);
 			return;
 		}
+
+		// Build posts data structure based on context.
+		$posts_data = array();
+
+		if ( is_network_admin() && is_multisite() ) {
+			// NETWORK ADMIN: Get posts from all sites.
+			$sites = get_sites( array( 'number' => 1000 ) ); // Adjust limit if needed.
+
+			foreach ( $sites as $site ) {
+				// Get post IDs for this link on this site.
+				$post_ids = $this->link_repository->get_post_ids_from_link_id(
+					$link->get_id(),
+					(int) $site->blog_id
+				);
+
+				// Skip if no posts on this site.
+				if ( empty( $post_ids ) ) {
+					continue;
+				}
+
+				// Switch to site context to get post data and URLs.
+				switch_to_blog( $site->blog_id );
+
+				// Get post objects (filtering out nulls).
+				$posts = array_filter( array_map( 'get_post', array_unique( $post_ids ) ) );
+
+				// Get site name.
+				$site_name = get_bloginfo( 'name' );
+
+				// Build post data array while in correct blog context.
+				$post_data = array();
+				foreach ( $posts as $post ) {
+					$post_type_object = get_post_type_object( $post->post_type );
+
+					// Build post type link (special case for 'post' type).
+					$post_type_link = 'post' === $post->post_type
+						? admin_url( 'edit.php' )
+						: admin_url( 'edit.php?post_type=' . $post->post_type );
+
+					$post_data[] = array(
+						'id'               => $post->ID,
+						'title'            => $post->post_title,
+						'post_type'        => $post->post_type,
+						'post_type_label'  => $post_type_object ? $post_type_object->labels->singular_name : $post->post_type,
+						'post_type_link'   => $post_type_link,
+						'status'           => get_post_status( $post->ID ),
+						'edit_link'        => get_edit_post_link( $post->ID ),
+						'view_link'        => get_permalink( $post->ID ),
+					);
+				}
+
+				// Restore original context.
+				restore_current_blog();
+
+				// Store in structure: blog_id => ['site_name' => ..., 'posts' => ...].
+				if ( ! empty( $post_data ) ) {
+					$posts_data[ (int) $site->blog_id ] = array(
+						'site_name' => $site_name,
+						'posts'     => $post_data,
+					);
+				}
+			}
+		} else {
+			// SINGLE SITE or SITE ADMIN: Current site only.
+			$post_ids = $this->link_repository->get_post_ids_from_link_id( $link->get_id() );
+			$posts    = array_filter( array_map( 'get_post', array_unique( $post_ids ) ) );
+
+			// Build post data array (no context switching needed).
+			$post_data = array();
+			foreach ( $posts as $post ) {
+				$post_type_object = get_post_type_object( $post->post_type );
+
+				// Build post type link (special case for 'post' type).
+				$post_type_link = 'post' === $post->post_type
+					? admin_url( 'edit.php' )
+					: admin_url( 'edit.php?post_type=' . $post->post_type );
+
+				$post_data[] = array(
+					'id'               => $post->ID,
+					'title'            => $post->post_title,
+					'post_type'        => $post->post_type,
+					'post_type_label'  => $post_type_object ? $post_type_object->labels->singular_name : $post->post_type,
+					'post_type_link'   => $post_type_link,
+					'status'           => get_post_status( $post->ID ),
+					'edit_link'        => get_edit_post_link( $post->ID ),
+					'view_link'        => get_permalink( $post->ID ),
+				);
+			}
+
+			// Wrap in same structure for template consistency.
+			if ( ! empty( $post_data ) ) {
+				$posts_data[ get_current_blog_id() ] = array(
+					'site_name' => get_bloginfo( 'name' ),
+					'posts'     => $post_data,
+				);
+			}
+		}
+
 		// Render the template.
 		iawmlf_render_template(
 			'admin/reports/link-details.php',
 			array(
-				'iawmlf_link'     => $link,
-				'iawmlf_posts'    => array_map( 'get_post', array_unique( $this->link_repository->get_post_ids_from_link_id( $link->get_id() ) ) ),
-				'iawmlf_back_url' => wp_get_referer() ?: self::get_page_url(), // phpcs:ignore Universal.Operators.DisallowShortTernary.Found, returns false, so cant use ??
+				'iawmlf_link'       => $link,
+				'iawmlf_posts'      => $posts_data, // Now structured by site.
+				'iawmlf_back_url'   => wp_get_referer() ?: self::get_page_url(), // phpcs:ignore Universal.Operators.DisallowShortTernary.Found, returns false, so cant use ??
+				'iawmlf_is_network' => is_network_admin() && is_multisite(),
 			)
 		);
 	}

@@ -587,19 +587,26 @@ class Link_Repository {
 	}
 
 	/**
-	 * Get the post id form link id.
+	 * Get the post id from link id.
 	 *
-	 * @param integer $link_id The link id.
+	 * @param integer  $link_id The link id.
+	 * @param int|null $site_id Optional. Site ID to query. Null for current site.
 	 *
 	 * @return integer[]
 	 */
-	public function get_post_ids_from_link_id( int $link_id ): array {
-		static $meta = null;
-		if ( null === $meta ) {
-			$meta = $this->get_all_link_meta();
+	public function get_post_ids_from_link_id( int $link_id, ?int $site_id = null ): array {
+		// Key the static cache by site_id to avoid cross-contamination.
+		static $meta_cache = array();
+
+		// Create cache key (use 0 for null/current site).
+		$cache_key = $site_id ?? 0;
+
+		// Check if we have cached data for this site.
+		if ( ! isset( $meta_cache[ $cache_key ] ) ) {
+			$meta_cache[ $cache_key ] = $this->get_all_link_meta( $site_id );
 		}
 
-		return $meta[ $link_id ] ?? array();
+		return $meta_cache[ $cache_key ][ $link_id ] ?? array();
 	}
 
 	/**
@@ -607,11 +614,22 @@ class Link_Repository {
 	 *
 	 * @since 1.2.0
 	 *
+	 * @param int|null $site_id Optional. Site ID to query. Null for current site.
+	 *
 	 * @return array
 	 */
-	private function get_all_link_meta(): array {
-		// Prepare the query.
-		$query = "SELECT * FROM {$this->wpdb->postmeta} WHERE meta_key = %s";
+	private function get_all_link_meta( ?int $site_id = null ): array {
+		// Determine which postmeta table to query.
+		if ( null !== $site_id ) {
+			// Get specific site's postmeta table (e.g., wp_2_postmeta).
+			$postmeta_table = $this->wpdb->get_blog_prefix( $site_id ) . 'postmeta';
+		} else {
+			// Use current site's postmeta table.
+			$postmeta_table = $this->wpdb->postmeta;
+		}
+
+		// Prepare the query with the determined table.
+		$query = "SELECT * FROM {$postmeta_table} WHERE meta_key = %s";
 
 		// Get the rows.
 		$rows = $this->wpdb->get_results(
