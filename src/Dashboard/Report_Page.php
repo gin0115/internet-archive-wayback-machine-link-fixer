@@ -70,6 +70,10 @@ class Report_Page {
 
 		add_action( 'admin_menu', array( $this, 'register_page' ) );
 
+		if ( is_multisite() ) {
+			add_action( 'network_admin_menu', array( $this, 'register_network_page' ) );
+		}
+
 		add_filter(
 			'set-screen-option',
 			function ( $status, $option, $value ) {
@@ -107,6 +111,42 @@ class Report_Page {
 
 		// Enqueue the scripts and styles.
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
+	}
+
+	/**
+	 * Registers the network admin report page.
+	 *
+	 * @return void
+	 */
+	public function register_network_page(): void {
+		$hook = add_submenu_page(
+			Dashboard_Page::DASHBOARD_SLUG,
+			__( 'Wayback Link Fixer - Links', 'internet-archive-wayback-machine-link-fixer' ),
+			__( 'Links', 'internet-archive-wayback-machine-link-fixer' ),
+			'manage_network_options',
+			self::SLUG,
+			array( $this, 'render_page' )
+		);
+
+		$this->hook = $hook;
+
+		// Add the screen options.
+		add_action( "load-$hook", array( $this, 'register_screen_options' ) );
+
+		// Toggle bulk actions.
+		add_filter( 'bulk_actions-' . $hook, array( $this, 'add_bulk_actions' ) );
+
+		// Enqueue the scripts and styles.
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
+	}
+
+	/**
+	 * Renders the network admin report page.
+	 *
+	 * @return void
+	 */
+	public function render_network_page(): void {
+		// Empty for now
 	}
 
 	/**

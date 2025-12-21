@@ -229,5 +229,47 @@
 				NO_LINKS.style.display = '';
 			}
 		}
+
+		/**
+		 * Handle multisite mode confirmation checkbox.
+		 *
+		 * @since 1.4.0
+		 */
+		const multisiteModeSelect = document.getElementById('iawmlf_multisite_links_table_mode');
+		const multisiteModeConfirm = document.getElementById('iawmlf_multisite_mode_confirm');
+		const multisiteModeConfirmCheckbox = document.getElementById('iawmlf_multisite_mode_confirm_checkbox');
+
+		if (multisiteModeSelect && multisiteModeConfirm && multisiteModeConfirmCheckbox) {
+			// Show/hide confirmation checkbox based on selection
+			multisiteModeSelect.addEventListener('change', function() {
+				const originalValue = this.dataset.originalValue;
+				const currentValue = this.value;
+
+				if (currentValue !== originalValue) {
+					multisiteModeConfirm.style.display = 'block';
+					multisiteModeConfirmCheckbox.required = true;
+				} else {
+					multisiteModeConfirm.style.display = 'none';
+					multisiteModeConfirmCheckbox.required = false;
+					multisiteModeConfirmCheckbox.checked = false;
+				}
+			});
+
+			// Prevent form submission if confirmation not checked when mode changed
+			const settingsForm = multisiteModeSelect.closest('form');
+			if (settingsForm) {
+				settingsForm.addEventListener('submit', function(e) {
+					const originalValue = multisiteModeSelect.dataset.originalValue;
+					const currentValue = multisiteModeSelect.value;
+
+					if (currentValue !== originalValue && !multisiteModeConfirmCheckbox.checked) {
+						e.preventDefault();
+						alert('Please confirm that you understand the impact of changing the multisite mode.');
+						multisiteModeConfirmCheckbox.focus();
+						return false;
+					}
+				});
+			}
+		}
 	});
 })();

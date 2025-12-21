@@ -69,6 +69,7 @@ class Settings {
 
 	// Multisite options.
 	public const MULTISITE_LINKS_TABLE_MODE = self::SETTINGS_PREFIX . 'multisite_links_table_mode';
+	public const MULTISITE_AVAILABLE_SITES = self::SETTINGS_PREFIX . 'multisite_available_sites';
 
 	/**
 	 * Gets the link table name.
@@ -608,6 +609,40 @@ class Settings {
 		return in_array( $mode, array( Multisite::SHARED_LINKS_TABLE_MODE, Multisite::SEPARATE_LINKS_TABLE_MODE ), true )
 			? $mode
 			: $default;
+	}
+
+	/**
+	 * Gets the sites where the plugin is available.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @return array|null Null = all sites, empty array = no sites, array of IDs = specific sites
+	 */
+	public static function get_multisite_available_sites(): ?array {
+		if ( ! is_multisite() ) {
+			return null;
+		}
+
+		$sites = get_network_option( get_current_network_id(), self::MULTISITE_AVAILABLE_SITES, null );
+		return is_array( $sites ) ? $sites : null;
+	}
+
+	/**
+	 * Sets the sites where the plugin is available.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @param array|null $sites Array of site IDs, null for all sites.
+	 *
+	 * @return void
+	 */
+	public static function set_multisite_available_sites( ?array $sites ): void {
+		if ( ! is_multisite() ) {
+			return;
+		}
+
+		$value = is_array( $sites ) ? array_map( 'absint', $sites ) : null;
+		update_network_option( get_current_network_id(), self::MULTISITE_AVAILABLE_SITES, $value );
 	}
 
 	/**

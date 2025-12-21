@@ -14,6 +14,7 @@ use Internet_Archive\Wayback_Machine_Link_Fixer\Settings\Settings;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Util\Environmental;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Setup_Wizard;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Dashboard_Page;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Multisite;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -50,6 +51,11 @@ class Settings_Page {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 		add_action( 'admin_menu', array( $this, 'register_page' ), 20, 0 );
 		add_action( 'admin_init', array( $this, 'validate_archive_org_keys' ), 1 );
+
+		if ( is_multisite() ) {
+			add_action( 'network_admin_menu', array( $this, 'register_network_page' ), 20 );
+			add_action( 'network_admin_edit_iawmlf_net_settings_save', array( $this, 'handle_network_settings_save' ) );
+		}
 	}
 
 	/**
@@ -100,6 +106,177 @@ class Settings_Page {
 		if ( ! Settings::is_wizard_completed() ) {
 			add_action( 'load-' . $this->menu_hook, array( $this, 'redirect_to_setup_wizard' ) );
 		}
+	}
+
+	/**
+	 * Registers the network admin settings page.
+	 *
+	 * @return void
+	 */
+	public function register_network_page(): void {
+		$this->menu_hook = add_submenu_page(
+			Dashboard_Page::DASHBOARD_SLUG,
+			__( 'Wayback Link Fixer Settings', 'internet-archive-wayback-machine-link-fixer' ),
+			__( 'Advanced Settings', 'internet-archive-wayback-machine-link-fixer' ),
+			'manage_network_options',
+			self::PAGE_SLUG,
+			array( $this, 'render_network_page' )
+		);
+
+		// If the setup has not been completed, add a on load hook.
+		if ( ! Settings::is_wizard_completed() ) {
+			add_action( 'load-' . $this->menu_hook, array( $this, 'redirect_to_setup_wizard' ) );
+		}
+	}
+
+	/**
+	 * Renders the network admin settings page.
+	 *
+	 * @return void
+	 */
+	public function render_network_page(): void {
+		iawmlf_render_not_authenticated_notice();
+
+		// Check if the wizard has been completed.
+		$wizard_link = '';
+		if ( Settings::is_wizard_completed() ) {
+			$wizard_link = \sprintf(
+				'<a href="%s" class="button button-primary">%s</a>',
+				esc_url( Setup_Wizard::get_wizard_url() . '&rerun-wizard=1' ),
+				esc_html__( 'Rerun The Setup Wizard', 'internet-archive-wayback-machine-link-fixer' )
+			);
+		}
+
+		echo '<div class="wrap">';
+		printf(
+			'<div id="iawmlf_settings_header" class="iawmlf-settings__header"><h1 class="wp-heading-inline iawmlf-settings__header">%s</h1></div>',
+			esc_html__( 'Wayback Link Fixer - Advanced Settings', 'internet-archive-wayback-machine-link-fixer' )
+		);
+
+		echo '<hr class="wp-header-end"><form action="edit.php?action=iawmlf_net_settings_save" method="post">';
+
+		do_settings_sections( self::PAGE_SLUG );
+		settings_fields( self::PAGE_SLUG );
+
+		submit_button( __( 'Save Changes', 'internet-archive-wayback-machine-link-fixer' ) );
+
+		echo '</form></div>';
+	}
+
+	/**
+	 * Handles the network admin settings save.
+	 *
+	 * @return void
+	 */
+	public function handle_network_settings_save(): void {
+		// Check user capability.
+		if ( ! current_user_can( 'manage_network_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'internet-archive-wayback-machine-link-fixer' ) );
+		}
+
+		// Verify nonce.
+		check_admin_referer( self::PAGE_SLUG . '-options' );
+
+		// Define all settings with their types.
+		$settings = array(
+			Settings::PROCESS_LINKS                             => 'boolean',
+			Settings::DROP_TABLES_ON_UNINSTALL_KEY              => 'boolean',
+			Settings::SCAN_EXISTING_POSTS                       => 'boolean',
+			Settings::ALLOW_OWN_CONTENT_SUBMISSIONS             => 'boolean',
+			Settings::ROUTINELY_UPDATE_WAYBACK_MACHINE          => 'boolean',
+			Settings::ALLOWED_POST_TYPES                        => 'array',
+			Settings::LINK_EXCLUSIONS                           => 'array',
+			Settings::ALLOWED_OWN_CONTENT_POST_TYPES            => 'array',
+			Settings::MINIMUM_CHECKS_BEFORE_BROKEN              => 'integer',
+			Settings::LINK_CHECK_DURATION_IN_DAYS               => 'integer',
+			Settings::ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL => 'integer',
+			Settings::ARCHIVE_ORG_SECRET_KEY                    => 'string',
+			Settings::ARCHIVE_ORG_ACCESS_KEY                    => 'string',
+			Settings::FIXER_OPTION                              => 'string',
+			Settings::MULTISITE_LINKS_TABLE_MODE                => 'string',
+			Settings::MULTISITE_AVAILABLE_SITES                 => 'array_nullable',
+		);
+
+		// Track if API keys were updated.
+		$api_keys_updated = false;
+
+		// Process each setting based on its type.
+		foreach ( $settings as $key => $type ) {
+			switch ( $type ) {
+				case 'boolean':
+					$value = isset( $_POST[ $key ] ) ? true : false; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+					update_network_option( get_current_network_id(), $key, $value );
+					break;
+
+				case 'array':
+					$value = isset( $_POST[ $key ] ) ? array_map( 'sanitize_text_field', (array) $_POST[ $key ] ) : array(); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+					update_network_option( get_current_network_id(), $key, $value );
+					break;
+
+				case 'integer':
+					if ( isset( $_POST[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+						$value = absint( $_POST[ $key ] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+						// Apply minimum value logic.
+						if ( Settings::MINIMUM_CHECKS_BEFORE_BROKEN === $key ) {
+							$value = 0 === $value ? 5 : $value;
+						} elseif ( Settings::LINK_CHECK_DURATION_IN_DAYS === $key ) {
+							$value = 0 === $value ? 7 : $value;
+						} elseif ( Settings::ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL === $key ) {
+							$value = 0 === $value ? 28 : $value;
+						}
+
+						update_network_option( get_current_network_id(), $key, $value );
+					}
+					break;
+
+				case 'string':
+					if ( isset( $_POST[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+						$value = sanitize_text_field( wp_unslash( $_POST[ $key ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+						// Track if API keys are being updated.
+						if ( Settings::ARCHIVE_ORG_SECRET_KEY === $key || Settings::ARCHIVE_ORG_ACCESS_KEY === $key ) {
+							$api_keys_updated = true;
+						}
+
+						update_network_option( get_current_network_id(), $key, $value );
+					}
+					break;
+
+				case 'array_nullable':
+					// Special handling: null if not set, array if set.
+					if ( isset( $_POST[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+						$value = array_map( 'absint', (array) $_POST[ $key ] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+						update_network_option( get_current_network_id(), $key, $value );
+					} else {
+						// Not present in POST = treat as null (all sites).
+						update_network_option( get_current_network_id(), $key, null );
+					}
+					break;
+			}
+		}
+
+		// Validate API keys if they were updated.
+		if ( $api_keys_updated ) {
+			$key           = get_network_option( get_current_network_id(), Settings::ARCHIVE_ORG_SECRET_KEY, '' );
+			$access_key    = get_network_option( get_current_network_id(), Settings::ARCHIVE_ORG_ACCESS_KEY, '' );
+			$system_client = iawmlf_get_system_client();
+			$is_valid      = $system_client->is_valid_user( $access_key, $key );
+
+			update_option( Settings::ARCHIVE_ORG_CREDS_VALID_KEY, $is_valid, false );
+		}
+
+		// Redirect back to the settings page.
+		wp_redirect(
+			add_query_arg(
+				array(
+					'page'    => self::PAGE_SLUG,
+					'updated' => 'true',
+				),
+				network_admin_url( 'admin.php' )
+			)
+		);
+		exit;
 	}
 
 	/**
@@ -427,6 +604,37 @@ class Settings_Page {
 				),
 			)
 		);
+
+		// Register multisite mode setting (network-wide only).
+		if ( is_multisite() ) {
+			register_setting(
+				self::PAGE_SLUG,
+				Settings::MULTISITE_LINKS_TABLE_MODE,
+				array(
+					'type'              => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+					'default'           => Multisite::SHARED_LINKS_TABLE_MODE,
+					'show_in_rest'      => false,
+				)
+			);
+
+			register_setting(
+				self::PAGE_SLUG,
+				Settings::MULTISITE_AVAILABLE_SITES,
+				array(
+					'type'              => 'array',
+					'sanitize_callback' => function ( $value ) {
+						// null = all sites, [] = no sites, array = specific sites.
+						if ( null === $value || '' === $value ) {
+							return null;
+						}
+						return is_array( $value ) ? array_map( 'absint', $value ) : null;
+					},
+					'default'           => null,
+					'show_in_rest'      => false,
+				)
+			);
+		}
 	}
 
 	/**
@@ -517,6 +725,28 @@ class Settings_Page {
 			self::PAGE_SLUG,
 			self::GROUP_PLUGIN_SETTINGS
 		);
+
+		// Add multisite mode field (only in multisite installations).
+		if ( is_multisite() ) {
+			add_settings_field(
+				Settings::MULTISITE_LINKS_TABLE_MODE,
+				__( 'Multisite Mode', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_multisite_mode_field' ),
+				self::PAGE_SLUG,
+				self::GROUP_PLUGIN_SETTINGS
+			);
+
+			// Add available sites field (only in network admin).
+			if ( is_network_admin() ) {
+				add_settings_field(
+					Settings::MULTISITE_AVAILABLE_SITES,
+					__( 'Available on Sites', 'internet-archive-wayback-machine-link-fixer' ),
+					array( $this, 'render_multisite_available_sites_field' ),
+					self::PAGE_SLUG,
+					self::GROUP_PLUGIN_SETTINGS
+				);
+			}
+		}
 
 		add_settings_field(
 			Settings::SCAN_EXISTING_POSTS,
@@ -770,6 +1000,108 @@ class Settings_Page {
 			/><?php esc_html_e( 'If checked, this will remove all local data when the plugin is uninstalled. Leave unchecked if you plan to reinstall this plugin.', 'internet-archive-wayback-machine-link-fixer' ); ?>
 		</label>
 		<?php
+	}
+
+	/**
+	 * Render the multisite mode field.
+	 *
+	 * @since   1.4.0
+	 *
+	 * @return  void
+	 */
+	public function render_multisite_mode_field(): void {
+		$current_mode     = Settings::get_multisite_links_table_mode();
+		$is_network_admin = is_network_admin();
+
+		if ( $is_network_admin ) {
+			// Editable dropdown for network admin.
+			?>
+			<select
+				id="<?php echo esc_attr( Settings::MULTISITE_LINKS_TABLE_MODE ); ?>"
+				name="<?php echo esc_attr( Settings::MULTISITE_LINKS_TABLE_MODE ); ?>"
+				data-original-value="<?php echo esc_attr( $current_mode ); ?>"
+			>
+				<option value="<?php echo esc_attr( Multisite::SHARED_LINKS_TABLE_MODE ); ?>" <?php selected( $current_mode, Multisite::SHARED_LINKS_TABLE_MODE ); ?>>
+					<?php esc_html_e( 'Shared Links Table - All sites use a single shared links table', 'internet-archive-wayback-machine-link-fixer' ); ?>
+				</option>
+				<option value="<?php echo esc_attr( Multisite::SEPARATE_LINKS_TABLE_MODE ); ?>" <?php selected( $current_mode, Multisite::SEPARATE_LINKS_TABLE_MODE ); ?>>
+					<?php esc_html_e( 'Separate Links Tables - Each site has its own links table', 'internet-archive-wayback-machine-link-fixer' ); ?>
+				</option>
+			</select>
+			<p class="description">
+				<?php esc_html_e( 'Choose how links are stored across your multisite network.', 'internet-archive-wayback-machine-link-fixer' ); ?>
+			</p>
+			<div id="iawmlf_multisite_mode_confirm" class="iawmlf-confirm-change" style="display: none;">
+				<label>
+					<input
+						type="checkbox"
+						id="iawmlf_multisite_mode_confirm_checkbox"
+						name="iawmlf_multisite_mode_confirm_checkbox"
+						value="1"
+					/>
+					<strong><?php esc_html_e( 'I understand that changing this setting may affect how links are stored across all sites in the network.', 'internet-archive-wayback-machine-link-fixer' ); ?></strong>
+				</label>
+			</div>
+			<?php
+		} else {
+			// Read-only display for subsite admin.
+			$mode_label = Multisite::SHARED_LINKS_TABLE_MODE === $current_mode
+				? __( 'Shared Links Table - All sites use a single shared links table', 'internet-archive-wayback-machine-link-fixer' )
+				: __( 'Separate Links Tables - Each site has its own links table', 'internet-archive-wayback-machine-link-fixer' );
+			?>
+			<div class="iawmlf-readonly-setting">
+				<span class="iawmlf-readonly-badge">
+					<?php esc_html_e( 'Network Setting', 'internet-archive-wayback-machine-link-fixer' ); ?>
+				</span>
+				<span class="iawmlf-readonly-value">
+					<?php echo esc_html( $mode_label ); ?>
+				</span>
+				<p class="description">
+					<?php esc_html_e( 'This setting is managed at the network level. Contact your network administrator to change this value.', 'internet-archive-wayback-machine-link-fixer' ); ?>
+				</p>
+			</div>
+			<?php
+		}
+	}
+
+	/**
+	 * Render the multisite available sites field.
+	 *
+	 * @since   1.4.0
+	 *
+	 * @return  void
+	 */
+	public function render_multisite_available_sites_field(): void {
+		if ( ! is_network_admin() ) {
+			return;
+		}
+
+		$selected_sites = Settings::get_multisite_available_sites();
+		$all_sites      = get_sites( array( 'number' => 999999 ) );
+
+		echo '<div class="iawmlf_settings_sites_checkboxes">';
+
+		foreach ( $all_sites as $site ) {
+			$site_id    = (int) $site->blog_id;
+			$is_checked = null === $selected_sites || in_array( $site_id, $selected_sites, true );
+
+			?>
+			<label for="<?php echo esc_attr( Settings::MULTISITE_AVAILABLE_SITES . '_' . $site_id ); ?>">
+				<input
+					type="checkbox"
+					id="<?php echo esc_attr( Settings::MULTISITE_AVAILABLE_SITES . '_' . $site_id ); ?>"
+					name="<?php echo esc_attr( Settings::MULTISITE_AVAILABLE_SITES ); ?>[]"
+					value="<?php echo esc_attr( $site_id ); ?>"
+					<?php checked( $is_checked ); ?>
+				/>
+				<?php echo esc_html( get_blog_details( $site_id )->blogname ); ?>
+				<span class="site-url">(<?php echo esc_html( get_site_url( $site_id ) ); ?>)</span>
+			</label>
+			<?php
+		}
+
+		echo '</div>';
+		echo '<p class="description">' . esc_html__( 'Select which sites can access this plugin. If no sites are selected, the plugin will be disabled on all sites.', 'internet-archive-wayback-machine-link-fixer' ) . '</p>';
 	}
 
 	/**
