@@ -412,22 +412,24 @@ class Settings_Page {
 				),
 			)
 		);
-
-		register_setting(
-			self::PAGE_SLUG,
-			Settings::DROP_TABLES_ON_UNINSTALL_KEY,
-			array(
-				'type'              => 'boolean',
-				'sanitize_callback' => 'wp_validate_boolean',
-				'default'           => false,
-				'show_in_rest'      => array(
-					'name'   => Settings::DROP_TABLES_ON_UNINSTALL_KEY,
-					'schema' => array(
-						'type' => 'boolean',
+		// Only register in network admin or non-multisite.
+		if ( ! is_multisite() || is_network_admin() ) {
+			register_setting(
+				self::PAGE_SLUG,
+				Settings::DROP_TABLES_ON_UNINSTALL_KEY,
+				array(
+					'type'              => 'boolean',
+					'sanitize_callback' => 'wp_validate_boolean',
+					'default'           => false,
+					'show_in_rest'      => array(
+						'name'   => Settings::DROP_TABLES_ON_UNINSTALL_KEY,
+						'schema' => array(
+							'type' => 'boolean',
+						),
 					),
-				),
-			)
-		);
+				)
+			);
+		}
 
 		register_setting(
 			self::PAGE_SLUG,
@@ -502,27 +504,30 @@ class Settings_Page {
 			)
 		);
 
-		register_setting(
-			self::PAGE_SLUG,
-			Settings::ARCHIVE_ORG_SECRET_KEY,
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-				'default'           => '',
-				'show_in_rest'      => false,
-			),
-		);
+		// Only register in network admin or non-multisite.
+		if ( ! is_multisite() || is_network_admin() ) {
+			register_setting(
+				self::PAGE_SLUG,
+				Settings::ARCHIVE_ORG_SECRET_KEY,
+				array(
+					'type'              => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+					'default'           => '',
+					'show_in_rest'      => false,
+				),
+			);
 
-		register_setting(
-			self::PAGE_SLUG,
-			Settings::ARCHIVE_ORG_ACCESS_KEY,
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-				'default'           => '',
-				'show_in_rest'      => false,
-			)
-		);
+			register_setting(
+				self::PAGE_SLUG,
+				Settings::ARCHIVE_ORG_ACCESS_KEY,
+				array(
+					'type'              => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+					'default'           => '',
+					'show_in_rest'      => false,
+				)
+			);
+		}
 
 		register_setting(
 			self::PAGE_SLUG,
@@ -656,20 +661,23 @@ class Settings_Page {
 			)
 		);
 
-		add_settings_section(
-			self::GROUP_IA_SETTINGS,
-			__( 'Archive.org API', 'internet-archive-wayback-machine-link-fixer' ),
-			'__return_empty_string',
-			self::PAGE_SLUG,
-			array(
-				'before_section' => '<div id="iawmlf_settings_ia_section" class="iawmlf_settings_postbox">',
-				'after_section'  => $this->render_invalid_api_keys_message() . '<p class="description">' . sprintf(
-						// Translators: %s is the link to the Internet account setup.
-					__( "To get your API key and secret, please visit the <a href='%s' target='_blank'>Internet Archive</a> and create a new 'S3 access key' (this is a type of credential used by Archive.org).", 'internet-archive-wayback-machine-link-fixer' ),
-					esc_url( 'https://archive.org/account/s3.php' )
-				) . '</p></div>',
-			)
-		);
+		// Only show Archive.org API section in network admin or non-multisite.
+		if ( ! is_multisite() || is_network_admin() ) {
+			add_settings_section(
+				self::GROUP_IA_SETTINGS,
+				__( 'Archive.org API', 'internet-archive-wayback-machine-link-fixer' ),
+				'__return_empty_string',
+				self::PAGE_SLUG,
+				array(
+					'before_section' => '<div id="iawmlf_settings_ia_section" class="iawmlf_settings_postbox">',
+					'after_section'  => $this->render_invalid_api_keys_message() . '<p class="description">' . sprintf(
+							// Translators: %s is the link to the Internet account setup.
+						__( "To get your API key and secret, please visit the <a href='%s' target='_blank'>Internet Archive</a> and create a new 'S3 access key' (this is a type of credential used by Archive.org).", 'internet-archive-wayback-machine-link-fixer' ),
+						esc_url( 'https://archive.org/account/s3.php' )
+					) . '</p></div>',
+				)
+			);
+		}
 
 		add_settings_section(
 			self::GROUP_LINK_FIXER,
@@ -718,13 +726,16 @@ class Settings_Page {
 			array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
 		);
 
-		add_settings_field(
-			Settings::DROP_TABLES_ON_UNINSTALL_KEY,
-			__( 'Wipe Data on Uninstall', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_drop_tables_on_uninstall_field' ),
-			self::PAGE_SLUG,
-			self::GROUP_PLUGIN_SETTINGS
-		);
+		// Only show in network admin or non-multisite.
+		if ( ! is_multisite() || is_network_admin() ) {
+			add_settings_field(
+				Settings::DROP_TABLES_ON_UNINSTALL_KEY,
+				__( 'Wipe Data on Uninstall', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_drop_tables_on_uninstall_field' ),
+				self::PAGE_SLUG,
+				self::GROUP_PLUGIN_SETTINGS
+			);
+		}
 
 		// Add multisite mode field (only in multisite installations).
 		if ( is_multisite() ) {
@@ -793,29 +804,32 @@ class Settings_Page {
 			array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
 		);
 
-		$empty_api_creds = '' === Settings::get_archive_access_key() && '' === Settings::get_archive_secret_key();
+		// Only show in network admin or non-multisite.
+		if ( ! is_multisite() || is_network_admin() ) {
+			$empty_api_creds = '' === Settings::get_archive_access_key() && '' === Settings::get_archive_secret_key();
 
-		add_settings_field(
-			Settings::ARCHIVE_ORG_ACCESS_KEY,
-			__( 'Archive.org Access Key', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_archive_api_access_key' ),
-			self::PAGE_SLUG,
-			self::GROUP_IA_SETTINGS,
-			array(
-				'class' => Settings::has_valid_archive_api_credentials() || $empty_api_creds ? '' : 'iawmlf_toggle_setting__invalid_api_keys',
-			)
-		);
+			add_settings_field(
+				Settings::ARCHIVE_ORG_ACCESS_KEY,
+				__( 'Archive.org Access Key', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_archive_api_access_key' ),
+				self::PAGE_SLUG,
+				self::GROUP_IA_SETTINGS,
+				array(
+					'class' => Settings::has_valid_archive_api_credentials() || $empty_api_creds ? '' : 'iawmlf_toggle_setting__invalid_api_keys',
+				)
+			);
 
-		add_settings_field(
-			Settings::ARCHIVE_ORG_SECRET_KEY,
-			__( 'Archive.org Secret Key', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_archive_api_secret_key' ),
-			self::PAGE_SLUG,
-			self::GROUP_IA_SETTINGS,
-			array(
-				'class' => Settings::has_valid_archive_api_credentials() || $empty_api_creds ? '' : 'iawmlf_toggle_setting__invalid_api_keys',
-			)
-		);
+			add_settings_field(
+				Settings::ARCHIVE_ORG_SECRET_KEY,
+				__( 'Archive.org Secret Key', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_archive_api_secret_key' ),
+				self::PAGE_SLUG,
+				self::GROUP_IA_SETTINGS,
+				array(
+					'class' => Settings::has_valid_archive_api_credentials() || $empty_api_creds ? '' : 'iawmlf_toggle_setting__invalid_api_keys',
+				)
+			);
+		}
 
 		add_settings_field(
 			Settings::ALLOW_OWN_CONTENT_SUBMISSIONS,
