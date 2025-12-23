@@ -73,7 +73,6 @@ final class Integrations {
 	 */
 	public function initialize(): void {
 
-
 		// If a multsite.
 		if ( is_multisite() ) {
 			if ( ! Multisite::should_enable_site() ) {
