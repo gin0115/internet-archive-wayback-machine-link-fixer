@@ -10,15 +10,16 @@
 
 namespace Internet_Archive\Wayback_Machine_Link_Fixer;
 
+use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Multisite;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Ajax\Ajax_Controller;
-use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Dashboard_Notifications;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Report_Page;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Setup_Wizard;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Event\Event_Controller;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Settings_Page;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Dashboard_Page;
 use Internet_Archive\Wayback_Machine_Link_Fixer\WP_Post\WP_Post_Controller;
 use Internet_Archive\Wayback_Machine_Link_Fixer\WP_Post\WP_Post_Table_Controller;
-use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Setup_Wizard;
-use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Dashboard_Page;
-use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Report_Page;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Dashboard_Notifications;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -71,6 +72,15 @@ final class Integrations {
 	 * @return  void
 	 */
 	public function initialize(): void {
+
+
+		// If a multsite.
+		if ( is_multisite() ) {
+			if ( ! Multisite::should_enable_site() ) {
+				return;
+			}
+		}
+
 		$this->dashboard_page->initialize();
 		$this->settings_page->initialize();
 		$this->post_controller->initialize();
