@@ -658,7 +658,7 @@ class Settings {
 	private static function get_multisite_aware_option( string $key, $default_value = false ) {
 		return ( ! is_multisite() || Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE )
 			? get_option( $key, $default_value )
-			: get_network_option( get_current_network_id(), $key, $default );
+			: get_network_option( get_current_network_id(), $key, $default_value );
 	}
 
 	/**
