@@ -71,6 +71,7 @@
             "@generate-autoloader"
         ],
         "test:php": "./vendor/bin/phpunit --testdox --colors=always",
+        "test:php:multisite": "./vendor/bin/phpunit -c phpunit-multisite.xml.dist --testdox --colors=always",
         "coverage:php": "./vendor/bin/phpunit --coverage-html=coverage --coverage-text --colors=always --testdox",
         "format:php": "phpcbf --standard=./.phpcs.xml --basepath=. . -v",
         "lint:php": "phpcs --standard=./.phpcs.xml --basepath=. . -v",

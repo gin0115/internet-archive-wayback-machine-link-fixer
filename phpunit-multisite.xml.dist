@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <phpunit
-    bootstrap="tests/bootstrap.php"
+    bootstrap="tests/bootstrap-multisite.php"
     backupGlobals="false"
     colors="true"
     convertErrorsToExceptions="true"
@@ -10,9 +10,8 @@
 
     >
     <testsuites>
-        <testsuite name="aiwmlf">
-            <directory prefix="Test_" suffix=".php">./tests/</directory>
-            <exclude>./tests/Multisite</exclude>
+        <testsuite name="aiwmlf-multisite">
+            <directory prefix="Test_" suffix=".php">./tests/Multisite/</directory>
         </testsuite>
     </testsuites>
 
@@ -23,10 +22,11 @@
     </filter>
 
     <php>
-        <env name="WP_PHPUNIT__TESTS_CONFIG" value="tests/wp-config.php" />
+        <env name="WP_PHPUNIT__TESTS_CONFIG" value="tests/wp-config-multisite.php" />
     </php>
 
     <logging>
         <log type="coverage-clover" target="coverage-report/logs/clover.xml"/>
     </logging>
 </phpunit>
+

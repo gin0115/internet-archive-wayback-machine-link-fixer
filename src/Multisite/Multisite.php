@@ -51,4 +51,31 @@ class Multisite {
 			$network_wide ? self::SHARED_LINKS_TABLE_MODE : self::SEPARATE_LINKS_TABLE_MODE
 		);
 	}
+
+	/**
+	 * Should enable site on multisite?
+	 *
+	 * @param integer|null $site_id The site ID. Null for current site.
+	 *
+	 * @return boolean
+	 */
+	public static function should_enable_site( ?int $site_id = null ): bool {
+		// If not multisite, return true.
+		if ( ! is_multisite() ) {
+			return true;
+		}
+
+		$site_id = $site_id ?? get_current_blog_id();
+
+		// Get the available sites.
+		$available_sites = Settings::get_multisite_available_sites();
+
+		// If no available sites, return true.
+		if ( empty( $available_sites ) ) {
+			return true;
+		}
+
+		// If the site ID is in the available sites, return true.
+		return in_array( $site_id, $available_sites, true );
+	}
 }
