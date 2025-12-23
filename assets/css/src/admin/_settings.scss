@@ -106,3 +106,169 @@
         margin: 0;
     }
 }
+
+// Read-only setting wrapper
+.iawmlf-readonly-wrapper {
+    padding: 20px;
+}
+
+// Read-only setting display
+.iawmlf-readonly-setting {
+    background: #f6f7f7;
+    border-left: 4px solid #72aee6;
+    padding: 12px 16px;
+    border-radius: 4px;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    .iawmlf_settings_postbox & {
+        padding-left: 10px;
+    }
+}
+
+.iawmlf-readonly-badge {
+    display: inline-block;
+    background: #72aee6;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.iawmlf-readonly-value {
+    display: block;
+    margin-top: 12px;
+    line-height: 1.6;
+    color: #1d2327;
+    font-size: 15px;
+    font-weight: 500;
+    &:first-of-type {
+        margin-top: 8px;
+    }
+    strong {
+        font-size: 11px;
+        color: #8c8f94;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        font-weight: 600;
+    }
+    // Inline values (label and value on same line)
+    &.iawmlf-inline {
+        strong {
+            display: inline;
+            margin-right: 8px;
+        }
+    }
+    // Stacked values (label on top, value below)
+    &.iawmlf-stacked {
+        strong {
+            display: block;
+            margin-bottom: 8px;
+        }
+    }
+    // Post types in 2 columns
+    &.iawmlf-post-types {
+        .iawmlf-post-types-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(200px, 1fr));
+            gap: 6px 24px;
+            width: fit-content;
+            margin: 0 auto;
+        }
+        .iawmlf-post-type-inactive {
+            opacity: 0.5;
+        }
+    }
+    // Excluded URLs - full width stacked
+    &.iawmlf-exclusions {
+        code {
+            display: block;
+            margin: 6px 0;
+            padding: 6px 10px;
+            background: #f0f0f1;
+            border-left: 3px solid #646970;
+            border-radius: 0;
+            word-break: break-all;
+            font-size: 13px;
+            color: #1d2327;
+            @media (min-width: 768px) {
+                margin: auto;
+                width: 80%;
+            }
+        }
+    }
+}
+
+.iawmlf-readonly-setting .description {
+    color: #646970;
+    font-style: italic;
+    margin: 16px 0 0 0;
+    font-size: 13px;
+}
+
+// Multisite mode select
+#iawmlf_multisite_links_table_mode {
+    min-width: 75%;
+}
+
+// Multisite mode confirmation checkbox
+.iawmlf-confirm-change {
+    margin-top: 12px;
+    padding: 12px 16px;
+    background: #fff3cd;
+    border-left: 4px solid #ffc107;
+    border-radius: 4px;
+    label {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin: 0;
+        cursor: pointer;
+        input[type="checkbox"] {
+            margin-top: 2px;
+            flex-shrink: 0;
+        }
+        strong {
+            color: #856404;
+        }
+    }
+}
+
+// Available sites checkboxes
+.iawmlf_settings_sites_checkboxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 8px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 10px;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    background: #f6f7f7;
+    label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        background: #fff;
+        border-radius: 3px;
+        cursor: pointer;
+        &:hover {
+            background: #f0f0f1;
+        }
+        input[type="checkbox"] {
+            margin: 0;
+            flex-shrink: 0;
+        }
+        .site-url {
+            color: #646970;
+            font-size: 12px;
+            margin-left: 4px;
+        }
+    }
+}

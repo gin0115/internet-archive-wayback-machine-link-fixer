@@ -68,6 +68,13 @@ class Dashboard_Page {
 		add_action( 'admin_menu', array( $this, 'register_page' ), 9 );
 		add_action( 'admin_menu', array( $this, 'rename_first_submenu_item' ), 999 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+
+		// If we are loading a multisite dashboard.
+		if ( is_multisite() ) {
+			// Register the multisite dashboard page.
+			add_action( 'network_admin_menu', array( $this, 'register_multisite_page' ), 9 );
+			add_action( 'network_admin_menu', array( $this, 'rename_first_submenu_item' ), 999 );
+		}
 	}
 
 	/**
@@ -132,6 +139,32 @@ class Dashboard_Page {
 	private function get_ia_icon_base64(): string {
 		$icon = 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjYwIDYwIDE0MCAxNDAiIGZpbGw9ImN1cnJlbnRDb2xvciI+PHBhdGggZD0iTTE3MS45MjggMTA5LjcwNEMxNzkuMDA3IDEwMi42MjUgMTc5LjAwNyA5MS4xNDkxIDE3MS45MjggODQuMDcwOUMxNjQuODUgNzYuOTkyNiAxNTMuMzc0IDc2Ljk5MjYgMTQ2LjI5NiA4NC4wNzA5TDg0LjA3MDQgMTQ2LjI5NkM3Ni45OTIyIDE1My4zNzUgNzYuOTkyMiAxNjQuODUxIDg0LjA3MDQgMTcxLjkyOUM5MS4xNDg3IDE3OS4wMDcgMTAyLjYyNSAxNzkuMDA3IDEwOS43MDMgMTcxLjkyOUwxNzEuOTI4IDEwOS43MDRaTTExNi41OTcgMTc4LjgyM0MxMDUuNzExIDE4OS43MDkgODguMDYyIDE4OS43MDkgNzcuMTc2MSAxNzguODIzQzY2LjI5MDMgMTY3LjkzNyA2Ni4yOTAzIDE1MC4yODggNzcuMTc2MSAxMzkuNDAyTDEzOS40MDIgNzcuMTc2NkMxNTAuMjg3IDY2LjI5MDcgMTY3LjkzNyA2Ni4yOTA3IDE3OC44MjMgNzcuMTc2NkMxODkuNzA5IDg4LjA2MjUgMTg5LjcwOSAxMDUuNzEyIDE3OC44MjMgMTE2LjU5OEwxMTYuNTk3IDE3OC44MjNaIi8+PHBhdGggZD0iTTE3OC44MjMgMTM5LjQwMkMxODkuNzA5IDE1MC4yODggMTg5LjcwOSAxNjcuOTM3IDE3OC44MjMgMTc4LjgyM0MxNjcuOTM3IDE4OS43MDkgMTUwLjI4OCAxODkuNzA5IDEzOS40MDIgMTc4LjgyM0wxMzUuMTU5IDE3NC41OEwxNDIuMDUzIDE2Ny42ODZMMTQ2LjI5NiAxNzEuOTI5QzE1My4zNzUgMTc5LjAwNyAxNjQuODUgMTc5LjAwNyAxNzEuOTI4IDE3MS45MjlDMTc5LjAwNiAxNjQuODUgMTc5LjAwNiAxNTMuMzc1IDE3MS45MjggMTQ2LjI5N0wxNjcuNjg1IDE0Mi4wNTRMMTc0LjU4IDEzNS4xNTlMMTc4LjgyMyAxMzkuNDAyWk03Ny4xNzYyIDc3LjE3NjdDODguMDYyIDY2LjI5MSAxMDUuNzExIDY2LjI5MTEgMTE2LjU5NyA3Ny4xNzY3TDEyMC44NCA4MS40MTk5TDExMy45NDYgODguMzEzNUwxMDkuNzA0IDg0LjA3MTNDMTAyLjYyNSA3Ni45OTMgOTEuMTQ5IDc2Ljk5MyA4NC4wNzA4IDg0LjA3MTNDNzYuOTkyNSA5MS4xNDk1IDc2Ljk5MjUgMTAyLjYyNiA4NC4wNzA4IDEwOS43MDRMODguMzEzIDExMy45NDZMODEuNDE5NCAxMjAuODQxTDc3LjE3NjIgMTE2LjU5OEM2Ni4yOTA2IDEwNS43MTIgNjYuMjkwNSA4OC4wNjI1IDc3LjE3NjIgNzcuMTc2N1oiLz48cGF0aCBkPSJNMTY3LjQyMSAxMjhMMTI3Ljk5OSAxNjcuNDIxTDg4LjU3ODIgMTI4TDEyNy45OTkgODguNTc4N0wxNjcuNDIxIDEyOFpNMTAyLjM2NyAxMjhMMTI3Ljk5OSAxNTMuNjMzTDE1My42MzIgMTI4TDEyNy45OTkgMTAyLjM2N0wxMDIuMzY3IDEyOFoiLz48cGF0aCBkPSJNMTMwLjEyMSAxMTguODA4QzEyOC41NTkgMTIwLjM3IDEyNi4wMjYgMTIwLjM3IDEyNC40NjQgMTE4LjgwOEMxMjIuOTAyIDExNy4yNDUgMTIyLjkwMiAxMTQuNzEzIDEyNC40NjQgMTEzLjE1MUMxMjYuMDI2IDExMS41ODkgMTI4LjU1OSAxMTEuNTg5IDEzMC4xMjEgMTEzLjE1MUMxMzEuNjgzIDExNC43MTMgMTMxLjY4MyAxMTcuMjQ1IDEzMC4xMjEgMTE4LjgwOFoiLz48cGF0aCBkPSJNMTE5LjUxNCAxMjkuNDE0QzExNy45NTIgMTMwLjk3NiAxMTUuNDE5IDEzMC45NzYgMTEzLjg1NyAxMjkuNDE0QzExMi4yOTUgMTI3Ljg1MiAxMTIuMjk1IDEyNS4zMTkgMTEzLjg1NyAxMjMuNzU3QzExNS40MTkgMTIyLjE5NSAxMTcuOTUyIDEyMi4xOTUgMTE5LjUxNCAxMjMuNzU3QzEyMS4wNzYgMTI1LjMxOSAxMjEuMDc2IDEyNy44NTIgMTE5LjUxNCAxMjkuNDE0WiIvPjxwYXRoIGQ9Ik0xNDIuODQ5IDEzMS41MzVDMTQxLjI4NyAxMzMuMDk4IDEzOC43NTQgMTMzLjA5OCAxMzcuMTkyIDEzMS41MzVDMTM1LjYzIDEyOS45NzMgMTM1LjYzIDEyNy40NDEgMTM3LjE5MiAxMjUuODc5QzEzOC43NTQgMTI0LjMxNiAxNDEuMjg3IDEyNC4zMTYgMTQyLjg0OSAxMjUuODc5QzE0NC40MTEgMTI3LjQ0MSAxNDQuNDExIDEyOS45NzMgMTQyLjg0OSAxMzEuNTM1WiIvPjxwYXRoIGQ9Ik0xMzIuMjQyIDE0Mi4xNDJDMTMwLjY4IDE0My43MDQgMTI4LjE0NyAxNDMuNzA0IDEyNi41ODUgMTQyLjE0MkMxMjUuMDIzIDE0MC41OCAxMjUuMDIzIDEzOC4wNDcgMTI2LjU4NSAxMzYuNDg1QzEyOC4xNDcgMTM0LjkyMyAxMzAuNjggMTM0LjkyMyAxMzIuMjQyIDEzNi40ODVDMTMzLjgwNCAxMzguMDQ3IDEzMy44MDQgMTQwLjU4IDEzMi4yNDIgMTQyLjE0MloiLz48L3N2Zz4K';
 		return \apply_filters( 'iawmlf_menu_icon_base64', $icon );
+	}
+
+	/**
+	 * Registers the multisite dashboard page.
+	 *
+	 * @return void
+	 */
+	public function register_multisite_page(): void {
+		add_menu_page(
+			__( 'Wayback Link Fixer', 'internet-archive-wayback-machine-link-fixer' ),
+			__( 'Link Fixer', 'internet-archive-wayback-machine-link-fixer' ),
+			'manage_network_options',
+			self::DASHBOARD_SLUG,
+			array( $this, 'render_network_page' ),
+			'data:image/svg+xml;base64,' . $this->get_ia_icon_base64(),
+			20
+		);
+	}
+
+	/**
+	 * Renders the network admin dashboard page.
+	 *
+	 * @return void
+	 */
+	public function render_network_page(): void {
+		// Empty for now
 	}
 
 

@@ -147,14 +147,29 @@ $iawmlf_link_title = iawmlf_trim_string( str_replace( array( 'http://', 'https:/
 						</div>
 					</div>
 
-					<div id="iawmlf_link_posts" class="postbox ">
-						<div class="postbox-header">
-							<h2 class="handle ui-sortable-handle"><?php esc_html_e( 'Found In', 'internet-archive-wayback-machine-link-fixer' ); ?></h2>
-						</div>
-						<div class="inside">
-							<?php if ( empty( $iawmlf_posts ) ) : ?>
-								<p><?php esc_html_e( 'This link has not been found in any posts yet.', 'internet-archive-wayback-machine-link-fixer' ); ?></p>
-							<?php else : ?>
+				<div id="iawmlf_link_posts" class="postbox ">
+					<div class="postbox-header">
+						<h2 class="handle ui-sortable-handle"><?php esc_html_e( 'Found In', 'internet-archive-wayback-machine-link-fixer' ); ?></h2>
+					</div>
+					<div class="inside">
+						<?php if ( empty( $iawmlf_posts ) ) : ?>
+							<p><?php esc_html_e( 'This link has not been found in any posts yet.', 'internet-archive-wayback-machine-link-fixer' ); ?></p>
+						<?php else : ?>
+							<?php foreach ( $iawmlf_posts as $iawmlf_blog_id => $iawmlf_site_data ) : ?>
+
+								<?php // Show site name heading if we're in network admin context. ?>
+								<?php if ( ! empty( $iawmlf_is_network ) ) : ?>
+									<h3 class="iawmlf-site-heading">
+										<?php
+										printf(
+											/* translators: %s: Site name */
+											esc_html__( 'Site: %s', 'internet-archive-wayback-machine-link-fixer' ),
+											esc_html( $iawmlf_site_data['site_name'] )
+										);
+										?>
+									</h3>
+								<?php endif; ?>
+
 								<table class="wp-list-table widefat fixed striped">
 									<thead>
 										<tr>
@@ -164,71 +179,66 @@ $iawmlf_link_title = iawmlf_trim_string( str_replace( array( 'http://', 'https:/
 											<th><?php esc_html_e( 'Actions', 'internet-archive-wayback-machine-link-fixer' ); ?></th>
 										</tr>
 									</thead>
-									<tbody>
-										<?php foreach ( $iawmlf_posts as $iawmlf_post ) : ?>
-											<tr>
-												<td>
-													<a href="<?php echo esc_url( get_edit_post_link( $iawmlf_post->ID ) ); ?>">
-														<?php if ( '' === $iawmlf_post->post_title ) : ?>
-															<?php
-															printf(
-																// Translators: %1$s is the post ID, %2$s is the post type label (e.g., "Post", "Page").
-																esc_html__( 'Untitled %2$s (ID: %1$d)', 'internet-archive-wayback-machine-link-fixer' ),
-																absint( $iawmlf_post->ID ),
-																esc_html( get_post_type_object( $iawmlf_post->post_type )->labels->singular_name )
-															);
-															?>
-														<?php else : ?>
-															<?php echo esc_html( iawmlf_trim_string( $iawmlf_post->post_title, 50 ) ); ?>
-														<?php endif; ?>
-													</a>
-												</td>
-												<td>
-												<?php
-												echo wp_kses(
-													iawmlf_get_admin_post_type_link( $iawmlf_post->post_type ),
-													array(
-														'a' => array(
-															'href' => array(),
-															'target' => array(),
-														),
-													)
-												);
-												?>
-													</td>
-												<td>
-													<?php
-													// Get the post status.
-													$iawmlf_post_status = get_post_status( $iawmlf_post->ID );
-													?>
-													<?php if ( 'publish' === $iawmlf_post_status ) : ?>
-														<span class="iawmlf-archived__redirect"><?php esc_html_e( 'Published', 'internet-archive-wayback-machine-link-fixer' ); ?></span>
-													<?php elseif ( 'draft' === $iawmlf_post_status ) : ?>
-														<span class="iawmlf-archived__redirect"><?php esc_html_e( 'Draft', 'internet-archive-wayback-machine-link-fixer' ); ?></span>
-													<?php elseif ( 'pending' === $iawmlf_post_status ) : ?>
-														<span class="iawmlf-archived__redirect"><?php esc_html_e( 'Pending', 'internet-archive-wayback-machine-link-fixer' ); ?></span>
-													<?php elseif ( 'future' === $iawmlf_post_status ) : ?>
-														<span class="iawmlf-archived__redirect"><?php esc_html_e( 'Scheduled', 'internet-archive-wayback-machine-link-fixer' ); ?></span>
+								<tbody>
+									<?php foreach ( $iawmlf_site_data['posts'] as $iawmlf_post_data ) : ?>
+										<tr>
+											<td>
+												<a href="<?php echo esc_url( $iawmlf_post_data['edit_link'] ); ?>">
+													<?php if ( '' === $iawmlf_post_data['title'] ) : ?>
+														<?php
+														printf(
+															// Translators: %1$s is the post ID, %2$s is the post type label (e.g., "Post", "Page").
+															esc_html__( 'Untitled %2$s (ID: %1$d)', 'internet-archive-wayback-machine-link-fixer' ),
+															absint( $iawmlf_post_data['id'] ),
+															esc_html( $iawmlf_post_data['post_type_label'] )
+														);
+														?>
 													<?php else : ?>
-														<span class="iawmlf-archived__redirect"><?php echo esc_html( $iawmlf_post_status ); ?></span>
+														<?php echo esc_html( iawmlf_trim_string( $iawmlf_post_data['title'], 50 ) ); ?>
 													<?php endif; ?>
-												</td>
-												<td>
-													<a href="<?php echo esc_url( get_edit_post_link( $iawmlf_post->ID ) ); ?>">
-														<?php esc_html_e( 'Edit', 'internet-archive-wayback-machine-link-fixer' ); ?>
-													</a>
-													|
-													<a href="<?php echo esc_url( get_permalink( $iawmlf_post->ID ) ); ?>">
-														<?php esc_html_e( 'View', 'internet-archive-wayback-machine-link-fixer' ); ?>
-													</a>
-												</td>
-											</tr>
-										<?php endforeach; ?>
-									</tbody>
+												</a>
+											</td>
+											<td>
+												<a href="<?php echo esc_url( $iawmlf_post_data['post_type_link'] ); ?>">
+													<?php echo esc_html( $iawmlf_post_data['post_type_label'] ); ?>
+												</a>
+											</td>
+											<td>
+												<?php if ( 'publish' === $iawmlf_post_data['status'] ) : ?>
+													<span class="iawmlf-archived__redirect"><?php esc_html_e( 'Published', 'internet-archive-wayback-machine-link-fixer' ); ?></span>
+												<?php elseif ( 'draft' === $iawmlf_post_data['status'] ) : ?>
+													<span class="iawmlf-archived__redirect"><?php esc_html_e( 'Draft', 'internet-archive-wayback-machine-link-fixer' ); ?></span>
+												<?php elseif ( 'pending' === $iawmlf_post_data['status'] ) : ?>
+													<span class="iawmlf-archived__redirect"><?php esc_html_e( 'Pending', 'internet-archive-wayback-machine-link-fixer' ); ?></span>
+												<?php elseif ( 'future' === $iawmlf_post_data['status'] ) : ?>
+													<span class="iawmlf-archived__redirect"><?php esc_html_e( 'Scheduled', 'internet-archive-wayback-machine-link-fixer' ); ?></span>
+												<?php else : ?>
+													<span class="iawmlf-archived__redirect"><?php echo esc_html( $iawmlf_post_data['status'] ); ?></span>
+												<?php endif; ?>
+											</td>
+											<td>
+												<a href="<?php echo esc_url( $iawmlf_post_data['edit_link'] ); ?>">
+													<?php esc_html_e( 'Edit', 'internet-archive-wayback-machine-link-fixer' ); ?>
+												</a>
+												|
+												<a href="<?php echo esc_url( $iawmlf_post_data['view_link'] ); ?>">
+													<?php esc_html_e( 'View', 'internet-archive-wayback-machine-link-fixer' ); ?>
+												</a>
+											</td>
+										</tr>
+									<?php endforeach; ?>
+								</tbody>
 								</table>
-							<?php endif; ?>
-						</div>
+
+								<?php // Add spacing between site tables if multiple sites. ?>
+								<?php if ( ! empty( $iawmlf_is_network ) && count( $iawmlf_posts ) > 1 ) : ?>
+									<div style="margin-bottom: 20px;"></div>
+								<?php endif; ?>
+
+							<?php endforeach; ?>
+						<?php endif; ?>
 					</div>
+				</div>
 				</div>
 			</div>
 		</div>

@@ -14,6 +14,7 @@ use Internet_Archive\Wayback_Machine_Link_Fixer\Settings\Settings;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Util\Environmental;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Setup_Wizard;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Dashboard_Page;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Multisite;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -50,6 +51,11 @@ class Settings_Page {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 		add_action( 'admin_menu', array( $this, 'register_page' ), 20, 0 );
 		add_action( 'admin_init', array( $this, 'validate_archive_org_keys' ), 1 );
+
+		if ( is_multisite() ) {
+			add_action( 'network_admin_menu', array( $this, 'register_network_page' ), 20 );
+			add_action( 'network_admin_edit_iawmlf_net_settings_save', array( $this, 'handle_network_settings_save' ) );
+		}
 	}
 
 	/**
@@ -100,6 +106,177 @@ class Settings_Page {
 		if ( ! Settings::is_wizard_completed() ) {
 			add_action( 'load-' . $this->menu_hook, array( $this, 'redirect_to_setup_wizard' ) );
 		}
+	}
+
+	/**
+	 * Registers the network admin settings page.
+	 *
+	 * @return void
+	 */
+	public function register_network_page(): void {
+		$this->menu_hook = add_submenu_page(
+			Dashboard_Page::DASHBOARD_SLUG,
+			__( 'Wayback Link Fixer Settings', 'internet-archive-wayback-machine-link-fixer' ),
+			__( 'Advanced Settings', 'internet-archive-wayback-machine-link-fixer' ),
+			'manage_network_options',
+			self::PAGE_SLUG,
+			array( $this, 'render_network_page' )
+		);
+
+		// If the setup has not been completed, add a on load hook.
+		if ( ! Settings::is_wizard_completed() ) {
+			add_action( 'load-' . $this->menu_hook, array( $this, 'redirect_to_setup_wizard' ) );
+		}
+	}
+
+	/**
+	 * Renders the network admin settings page.
+	 *
+	 * @return void
+	 */
+	public function render_network_page(): void {
+		iawmlf_render_not_authenticated_notice();
+
+		// Check if the wizard has been completed.
+		$wizard_link = '';
+		if ( Settings::is_wizard_completed() ) {
+			$wizard_link = \sprintf(
+				'<a href="%s" class="button button-primary">%s</a>',
+				esc_url( Setup_Wizard::get_wizard_url() . '&rerun-wizard=1' ),
+				esc_html__( 'Rerun The Setup Wizard', 'internet-archive-wayback-machine-link-fixer' )
+			);
+		}
+
+		echo '<div class="wrap">';
+		printf(
+			'<div id="iawmlf_settings_header" class="iawmlf-settings__header"><h1 class="wp-heading-inline iawmlf-settings__header">%s</h1></div>',
+			esc_html__( 'Wayback Link Fixer - Advanced Settings', 'internet-archive-wayback-machine-link-fixer' )
+		);
+
+		echo '<hr class="wp-header-end"><form action="edit.php?action=iawmlf_net_settings_save" method="post">';
+
+		do_settings_sections( self::PAGE_SLUG );
+		settings_fields( self::PAGE_SLUG );
+
+		submit_button( __( 'Save Changes', 'internet-archive-wayback-machine-link-fixer' ) );
+
+		echo '</form></div>';
+	}
+
+	/**
+	 * Handles the network admin settings save.
+	 *
+	 * @return void
+	 */
+	public function handle_network_settings_save(): void {
+		// Check user capability.
+		if ( ! current_user_can( 'manage_network_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'internet-archive-wayback-machine-link-fixer' ) );
+		}
+
+		// Verify nonce.
+		check_admin_referer( self::PAGE_SLUG . '-options' );
+
+		// Define all settings with their types.
+		$settings = array(
+			Settings::PROCESS_LINKS                    => 'boolean',
+			Settings::DROP_TABLES_ON_UNINSTALL_KEY     => 'boolean',
+			Settings::SCAN_EXISTING_POSTS              => 'boolean',
+			Settings::ALLOW_OWN_CONTENT_SUBMISSIONS    => 'boolean',
+			Settings::ROUTINELY_UPDATE_WAYBACK_MACHINE => 'boolean',
+			Settings::ALLOWED_POST_TYPES               => 'array',
+			Settings::LINK_EXCLUSIONS                  => 'array',
+			Settings::ALLOWED_OWN_CONTENT_POST_TYPES   => 'array',
+			Settings::MINIMUM_CHECKS_BEFORE_BROKEN     => 'integer',
+			Settings::LINK_CHECK_DURATION_IN_DAYS      => 'integer',
+			Settings::ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL => 'integer',
+			Settings::ARCHIVE_ORG_SECRET_KEY           => 'string',
+			Settings::ARCHIVE_ORG_ACCESS_KEY           => 'string',
+			Settings::FIXER_OPTION                     => 'string',
+			Settings::MULTISITE_LINKS_TABLE_MODE       => 'string',
+			Settings::MULTISITE_AVAILABLE_SITES        => 'array_nullable',
+		);
+
+		// Track if API keys were updated.
+		$api_keys_updated = false;
+
+		// Process each setting based on its type.
+		foreach ( $settings as $key => $type ) {
+			switch ( $type ) {
+				case 'boolean':
+					$value = isset( $_POST[ $key ] ) ? true : false; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+					update_network_option( get_current_network_id(), $key, $value );
+					break;
+
+				case 'array':
+					$value = isset( $_POST[ $key ] ) ? array_map( 'sanitize_text_field', (array) $_POST[ $key ] ) : array(); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+					update_network_option( get_current_network_id(), $key, $value );
+					break;
+
+				case 'integer':
+					if ( isset( $_POST[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+						$value = absint( $_POST[ $key ] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+						// Apply minimum value logic.
+						if ( Settings::MINIMUM_CHECKS_BEFORE_BROKEN === $key ) {
+							$value = 0 === $value ? 5 : $value;
+						} elseif ( Settings::LINK_CHECK_DURATION_IN_DAYS === $key ) {
+							$value = 0 === $value ? 7 : $value;
+						} elseif ( Settings::ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL === $key ) {
+							$value = 0 === $value ? 28 : $value;
+						}
+
+						update_network_option( get_current_network_id(), $key, $value );
+					}
+					break;
+
+				case 'string':
+					if ( isset( $_POST[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+						$value = sanitize_text_field( wp_unslash( $_POST[ $key ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+						// Track if API keys are being updated.
+						if ( Settings::ARCHIVE_ORG_SECRET_KEY === $key || Settings::ARCHIVE_ORG_ACCESS_KEY === $key ) {
+							$api_keys_updated = true;
+						}
+
+						update_network_option( get_current_network_id(), $key, $value );
+					}
+					break;
+
+				case 'array_nullable':
+					// Special handling: null if not set, array if set.
+					if ( isset( $_POST[ $key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+						$value = array_map( 'absint', (array) $_POST[ $key ] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+						update_network_option( get_current_network_id(), $key, $value );
+					} else {
+						// Not present in POST = treat as null (all sites).
+						update_network_option( get_current_network_id(), $key, null );
+					}
+					break;
+			}
+		}
+
+		// Validate API keys if they were updated.
+		if ( $api_keys_updated ) {
+			$key           = get_network_option( get_current_network_id(), Settings::ARCHIVE_ORG_SECRET_KEY, '' );
+			$access_key    = get_network_option( get_current_network_id(), Settings::ARCHIVE_ORG_ACCESS_KEY, '' );
+			$system_client = iawmlf_get_system_client();
+			$is_valid      = $system_client->is_valid_user( $access_key, $key );
+
+			update_option( Settings::ARCHIVE_ORG_CREDS_VALID_KEY, $is_valid, false );
+		}
+
+		// Redirect back to the settings page.
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'    => self::PAGE_SLUG,
+					'updated' => 'true',
+				),
+				network_admin_url( 'admin.php' )
+			)
+		);
+		exit;
 	}
 
 	/**
@@ -235,22 +412,24 @@ class Settings_Page {
 				),
 			)
 		);
-
-		register_setting(
-			self::PAGE_SLUG,
-			Settings::DROP_TABLES_ON_UNINSTALL_KEY,
-			array(
-				'type'              => 'boolean',
-				'sanitize_callback' => 'wp_validate_boolean',
-				'default'           => false,
-				'show_in_rest'      => array(
-					'name'   => Settings::DROP_TABLES_ON_UNINSTALL_KEY,
-					'schema' => array(
-						'type' => 'boolean',
+		// Only register in network admin or non-multisite.
+		if ( ! is_multisite() || is_network_admin() ) {
+			register_setting(
+				self::PAGE_SLUG,
+				Settings::DROP_TABLES_ON_UNINSTALL_KEY,
+				array(
+					'type'              => 'boolean',
+					'sanitize_callback' => 'wp_validate_boolean',
+					'default'           => false,
+					'show_in_rest'      => array(
+						'name'   => Settings::DROP_TABLES_ON_UNINSTALL_KEY,
+						'schema' => array(
+							'type' => 'boolean',
+						),
 					),
-				),
-			)
-		);
+				)
+			);
+		}
 
 		register_setting(
 			self::PAGE_SLUG,
@@ -325,27 +504,30 @@ class Settings_Page {
 			)
 		);
 
-		register_setting(
-			self::PAGE_SLUG,
-			Settings::ARCHIVE_ORG_SECRET_KEY,
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-				'default'           => '',
-				'show_in_rest'      => false,
-			),
-		);
+		// Only register in network admin or non-multisite.
+		if ( ! is_multisite() || is_network_admin() ) {
+			register_setting(
+				self::PAGE_SLUG,
+				Settings::ARCHIVE_ORG_SECRET_KEY,
+				array(
+					'type'              => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+					'default'           => '',
+					'show_in_rest'      => false,
+				),
+			);
 
-		register_setting(
-			self::PAGE_SLUG,
-			Settings::ARCHIVE_ORG_ACCESS_KEY,
-			array(
-				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-				'default'           => '',
-				'show_in_rest'      => false,
-			)
-		);
+			register_setting(
+				self::PAGE_SLUG,
+				Settings::ARCHIVE_ORG_ACCESS_KEY,
+				array(
+					'type'              => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+					'default'           => '',
+					'show_in_rest'      => false,
+				)
+			);
+		}
 
 		register_setting(
 			self::PAGE_SLUG,
@@ -427,6 +609,37 @@ class Settings_Page {
 				),
 			)
 		);
+
+		// Register multisite mode setting (network-wide only).
+		if ( is_multisite() ) {
+			register_setting(
+				self::PAGE_SLUG,
+				Settings::MULTISITE_LINKS_TABLE_MODE,
+				array(
+					'type'              => 'string',
+					'sanitize_callback' => 'sanitize_text_field',
+					'default'           => Multisite::SHARED_LINKS_TABLE_MODE,
+					'show_in_rest'      => false,
+				)
+			);
+
+			register_setting(
+				self::PAGE_SLUG,
+				Settings::MULTISITE_AVAILABLE_SITES,
+				array(
+					'type'              => 'array',
+					'sanitize_callback' => function ( $value ) {
+						// null = all sites, [] = no sites, array = specific sites.
+						if ( null === $value || '' === $value ) {
+							return null;
+						}
+						return is_array( $value ) ? array_map( 'absint', $value ) : null;
+					},
+					'default'           => null,
+					'show_in_rest'      => false,
+				)
+			);
+		}
 	}
 
 	/**
@@ -448,27 +661,28 @@ class Settings_Page {
 			)
 		);
 
-		add_settings_section(
-			self::GROUP_IA_SETTINGS,
-			__( 'Archive.org API', 'internet-archive-wayback-machine-link-fixer' ),
-			'__return_empty_string',
-			self::PAGE_SLUG,
-			array(
-				'before_section' => '<div id="iawmlf_settings_ia_section" class="iawmlf_settings_postbox">',
-				'after_section'  => $this->render_invalid_api_keys_message() . '<p class="description">' . sprintf(
-						// Translators: %s is the link to the Internet account setup.
-					__( "To get your API key and secret, please visit the <a href='%s' target='_blank'>Internet Archive</a> and create a new 'S3 access key' (this is a type of credential used by Archive.org).", 'internet-archive-wayback-machine-link-fixer' ),
-					esc_url( 'https://archive.org/account/s3.php' )
-				) . '</p></div>',
-			)
-		);
+		// Only show Archive.org API section in network admin or non-multisite.
+		if ( ! is_multisite() || is_network_admin() ) {
+			add_settings_section(
+				self::GROUP_IA_SETTINGS,
+				__( 'Archive.org API', 'internet-archive-wayback-machine-link-fixer' ),
+				'__return_empty_string',
+				self::PAGE_SLUG,
+				array(
+					'before_section' => '<div id="iawmlf_settings_ia_section" class="iawmlf_settings_postbox">',
+					'after_section'  => $this->render_invalid_api_keys_message() . '<p class="description">' . sprintf(
+							// Translators: %s is the link to the Internet account setup.
+						__( "To get your API key and secret, please visit the <a href='%s' target='_blank'>Internet Archive</a> and create a new 'S3 access key' (this is a type of credential used by Archive.org).", 'internet-archive-wayback-machine-link-fixer' ),
+						esc_url( 'https://archive.org/account/s3.php' )
+					) . '</p></div>',
+				)
+			);
+		}
 
 		add_settings_section(
 			self::GROUP_LINK_FIXER,
 			__( 'Link Fixer', 'internet-archive-wayback-machine-link-fixer' ),
-			function () {
-				echo '<p class="description">' . esc_html__( 'Enable the Link Fixer to scan links in your selected post types. It will find or create archived versions on the Internet Archive to ensure links remain accessible if they break.', 'internet-archive-wayback-machine-link-fixer' ) . '</p>';
-			},
+			array( $this, 'render_link_fixer_section' ),
 			self::PAGE_SLUG,
 			array(
 				'before_section' => '<div id="iawmlf_settings_link_fixer_section" class="iawmlf_settings_postbox">',
@@ -479,13 +693,7 @@ class Settings_Page {
 		add_settings_section(
 			self::GROUP_AUTO_ARCHIVER,
 			__( 'Auto Archiver', 'internet-archive-wayback-machine-link-fixer' ),
-			function () {
-				if ( Environmental::is_production() ) {
-					echo '<p class="description">' . esc_html__( 'Keep your content securely archived with the Auto Archiver. Each time you update a post, a fresh copy is saved to the Wayback Machine. Ensure your work remains accessible and preserved over time.', 'internet-archive-wayback-machine-link-fixer' ) . '</p>';
-				} else {
-					echo '<p class="description staging">' . esc_html__( 'Non-production environment detected - auto archiving is disabled to prevent staging and development sites from being archived.', 'internet-archive-wayback-machine-link-fixer' ) . '</p>';
-				}
-			},
+			array( $this, 'render_auto_archiver_section' ),
 			self::PAGE_SLUG,
 			array(
 				'before_section' => sprintf( '<div id="iawmlf_settings_link_fixer_section" class="iawmlf_settings_postbox auto-archiver %s">', ! Environmental::is_production() ? 'staging' : '' ),
@@ -493,134 +701,168 @@ class Settings_Page {
 			)
 		);
 
-		add_settings_field(
-			Settings::PROCESS_LINKS,
-			__( 'Enable Link Fixer', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_process_links_field' ),
-			self::PAGE_SLUG,
-			self::GROUP_LINK_FIXER
-		);
+		// Only register Link Fixer fields if NOT sub-site in SHARED mode.
+		if ( ! is_multisite() || is_network_admin() || Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE ) {
+			add_settings_field(
+				Settings::PROCESS_LINKS,
+				__( 'Enable Link Fixer', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_process_links_field' ),
+				self::PAGE_SLUG,
+				self::GROUP_LINK_FIXER
+			);
 
-		add_settings_field(
-			Settings::ALLOWED_POST_TYPES,
-			__( 'Post Types', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_fixer_post_types_field' ),
-			self::PAGE_SLUG,
-			self::GROUP_LINK_FIXER,
-			array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
-		);
+			add_settings_field(
+				Settings::ALLOWED_POST_TYPES,
+				__( 'Post Types', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_fixer_post_types_field' ),
+				self::PAGE_SLUG,
+				self::GROUP_LINK_FIXER,
+				array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
+			);
 
-		add_settings_field(
-			Settings::DROP_TABLES_ON_UNINSTALL_KEY,
-			__( 'Wipe Data on Uninstall', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_drop_tables_on_uninstall_field' ),
-			self::PAGE_SLUG,
-			self::GROUP_PLUGIN_SETTINGS
-		);
+			add_settings_field(
+				Settings::SCAN_EXISTING_POSTS,
+				__( 'Existing Posts', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_check_existing_posts' ),
+				self::PAGE_SLUG,
+				self::GROUP_LINK_FIXER,
+				array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
+			);
 
-		add_settings_field(
-			Settings::SCAN_EXISTING_POSTS,
-			__( 'Existing Posts', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_check_existing_posts' ),
-			self::PAGE_SLUG,
-			self::GROUP_LINK_FIXER,
-			array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
-		);
+			add_settings_field(
+				Settings::FIXER_OPTION,
+				__( 'Fixer Option', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_fixer_option' ),
+				self::PAGE_SLUG,
+				self::GROUP_LINK_FIXER,
+				array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
+			);
 
-		add_settings_field(
-			Settings::FIXER_OPTION,
-			__( 'Fixer Option', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_fixer_option' ),
-			self::PAGE_SLUG,
-			self::GROUP_LINK_FIXER,
-			array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
-		);
+			add_settings_field(
+				Settings::LINK_EXCLUSIONS,
+				__( 'Link Exclusions', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_link_exclusions_field' ),
+				self::PAGE_SLUG,
+				self::GROUP_LINK_FIXER,
+				array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
+			);
 
-		add_settings_field(
-			Settings::LINK_EXCLUSIONS,
-			__( 'Link Exclusions', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_link_exclusions_field' ),
-			self::PAGE_SLUG,
-			self::GROUP_LINK_FIXER,
-			array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
-		);
+			add_settings_field(
+				Settings::LINK_CHECK_DURATION_IN_DAYS,
+				__( 'Check Frequency', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_link_check_duration_field' ),
+				self::PAGE_SLUG,
+				self::GROUP_LINK_FIXER,
+				array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
+			);
 
-		add_settings_field(
-			Settings::LINK_CHECK_DURATION_IN_DAYS,
-			__( 'Check Frequency', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_link_check_duration_field' ),
-			self::PAGE_SLUG,
-			self::GROUP_LINK_FIXER,
-			array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
-		);
+			add_settings_field(
+				Settings::MINIMUM_CHECKS_BEFORE_BROKEN,
+				__( 'Failure Threshold', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_minimum_checks_before_broken_field' ),
+				self::PAGE_SLUG,
+				self::GROUP_LINK_FIXER,
+				array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
+			);
+		}
 
-		add_settings_field(
-			Settings::MINIMUM_CHECKS_BEFORE_BROKEN,
-			__( 'Failure Threshold', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_minimum_checks_before_broken_field' ),
-			self::PAGE_SLUG,
-			self::GROUP_LINK_FIXER,
-			array( 'class' => Settings::is_link_processing_enabled() ? 'iawmlf_toggle_setting__fixer' : 'iawmlf_toggle_setting__fixer hidden' )
-		);
+		// Only show in network admin or non-multisite.
+		if ( ! is_multisite() || is_network_admin() ) {
+			add_settings_field(
+				Settings::DROP_TABLES_ON_UNINSTALL_KEY,
+				__( 'Wipe Data on Uninstall', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_drop_tables_on_uninstall_field' ),
+				self::PAGE_SLUG,
+				self::GROUP_PLUGIN_SETTINGS
+			);
+		}
 
-		$empty_api_creds = '' === Settings::get_archive_access_key() && '' === Settings::get_archive_secret_key();
+		// Add multisite mode field (only in multisite installations).
+		if ( is_multisite() ) {
+			add_settings_field(
+				Settings::MULTISITE_LINKS_TABLE_MODE,
+				__( 'Multisite Mode', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_multisite_mode_field' ),
+				self::PAGE_SLUG,
+				self::GROUP_PLUGIN_SETTINGS
+			);
 
-		add_settings_field(
-			Settings::ARCHIVE_ORG_ACCESS_KEY,
-			__( 'Archive.org Access Key', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_archive_api_access_key' ),
-			self::PAGE_SLUG,
-			self::GROUP_IA_SETTINGS,
-			array(
-				'class' => Settings::has_valid_archive_api_credentials() || $empty_api_creds ? '' : 'iawmlf_toggle_setting__invalid_api_keys',
-			)
-		);
+			// Add available sites field (only in network admin).
+			if ( is_network_admin() ) {
+				add_settings_field(
+					Settings::MULTISITE_AVAILABLE_SITES,
+					__( 'Available on Sites', 'internet-archive-wayback-machine-link-fixer' ),
+					array( $this, 'render_multisite_available_sites_field' ),
+					self::PAGE_SLUG,
+					self::GROUP_PLUGIN_SETTINGS
+				);
+			}
+		}
 
-		add_settings_field(
-			Settings::ARCHIVE_ORG_SECRET_KEY,
-			__( 'Archive.org Secret Key', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_archive_api_secret_key' ),
-			self::PAGE_SLUG,
-			self::GROUP_IA_SETTINGS,
-			array(
-				'class' => Settings::has_valid_archive_api_credentials() || $empty_api_creds ? '' : 'iawmlf_toggle_setting__invalid_api_keys',
-			)
-		);
+		// Only show in network admin or non-multisite.
+		if ( ! is_multisite() || is_network_admin() ) {
+			$empty_api_creds = '' === Settings::get_archive_access_key() && '' === Settings::get_archive_secret_key();
 
-		add_settings_field(
-			Settings::ALLOW_OWN_CONTENT_SUBMISSIONS,
-			__( 'Auto Archive Posts', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_allow_own_posts' ),
-			self::PAGE_SLUG,
-			self::GROUP_AUTO_ARCHIVER
-		);
+			add_settings_field(
+				Settings::ARCHIVE_ORG_ACCESS_KEY,
+				__( 'Archive.org Access Key', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_archive_api_access_key' ),
+				self::PAGE_SLUG,
+				self::GROUP_IA_SETTINGS,
+				array(
+					'class' => Settings::has_valid_archive_api_credentials() || $empty_api_creds ? '' : 'iawmlf_toggle_setting__invalid_api_keys',
+				)
+			);
 
-		add_settings_field(
-			Settings::ROUTINELY_UPDATE_WAYBACK_MACHINE,
-			__( 'Routinely Archive', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_own_link_routinely_update' ),
-			self::PAGE_SLUG,
-			self::GROUP_AUTO_ARCHIVER,
-			array( 'class' => Settings::add_own_links() ? 'iawmlf_toggle_setting__auto_archiver' : 'iawmlf_toggle_setting__auto_archiver hidden' )
-		);
+			add_settings_field(
+				Settings::ARCHIVE_ORG_SECRET_KEY,
+				__( 'Archive.org Secret Key', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_archive_api_secret_key' ),
+				self::PAGE_SLUG,
+				self::GROUP_IA_SETTINGS,
+				array(
+					'class' => Settings::has_valid_archive_api_credentials() || $empty_api_creds ? '' : 'iawmlf_toggle_setting__invalid_api_keys',
+				)
+			);
+		}
 
-		add_settings_field(
-			Settings::ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL,
-			__( 'Routine Interval', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_own_link_routinely_update_interval' ),
-			self::PAGE_SLUG,
-			self::GROUP_AUTO_ARCHIVER,
-			array( 'class' => Settings::add_own_links() ? 'iawmlf_toggle_setting__auto_archiver' : 'iawmlf_toggle_setting__auto_archiver hidden' )
-		);
+		// Only register Auto Archiver fields if NOT sub-site in SHARED mode.
+		if ( ! is_multisite() || is_network_admin() || Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE ) {
+			add_settings_field(
+				Settings::ALLOW_OWN_CONTENT_SUBMISSIONS,
+				__( 'Auto Archive Posts', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_allow_own_posts' ),
+				self::PAGE_SLUG,
+				self::GROUP_AUTO_ARCHIVER
+			);
 
-		add_settings_field(
-			Settings::ALLOWED_OWN_CONTENT_POST_TYPES,
-			__( 'Allowed Post Types', 'internet-archive-wayback-machine-link-fixer' ),
-			array( $this, 'render_archiver_post_types_field' ),
-			self::PAGE_SLUG,
-			self::GROUP_AUTO_ARCHIVER,
-			array( 'class' => Settings::add_own_links() ? 'iawmlf_toggle_setting__auto_archiver' : 'iawmlf_toggle_setting__auto_archiver hidden' )
-		);
+			add_settings_field(
+				Settings::ROUTINELY_UPDATE_WAYBACK_MACHINE,
+				__( 'Routinely Archive', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_own_link_routinely_update' ),
+				self::PAGE_SLUG,
+				self::GROUP_AUTO_ARCHIVER,
+				array( 'class' => Settings::add_own_links() ? 'iawmlf_toggle_setting__auto_archiver' : 'iawmlf_toggle_setting__auto_archiver hidden' )
+			);
+
+			add_settings_field(
+				Settings::ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL,
+				__( 'Routine Interval', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_own_link_routinely_update_interval' ),
+				self::PAGE_SLUG,
+				self::GROUP_AUTO_ARCHIVER,
+				array( 'class' => Settings::add_own_links() ? 'iawmlf_toggle_setting__auto_archiver' : 'iawmlf_toggle_setting__auto_archiver hidden' )
+			);
+
+			add_settings_field(
+				Settings::ALLOWED_OWN_CONTENT_POST_TYPES,
+				__( 'Allowed Post Types', 'internet-archive-wayback-machine-link-fixer' ),
+				array( $this, 'render_archiver_post_types_field' ),
+				self::PAGE_SLUG,
+				self::GROUP_AUTO_ARCHIVER,
+				array( 'class' => Settings::add_own_links() ? 'iawmlf_toggle_setting__auto_archiver' : 'iawmlf_toggle_setting__auto_archiver hidden' )
+			);
+		}
 	}
 
 	/**
@@ -692,6 +934,111 @@ class Settings_Page {
 	}
 
 	/**
+	 * Renders Link Fixer section - either description or read-only template.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @return void
+	 */
+	public function render_link_fixer_section(): void {
+		// Check if sub-site in SHARED mode.
+		if ( is_multisite() && ! is_network_admin() && Environmental::get_links_table_mode() === Multisite::SHARED_LINKS_TABLE_MODE ) {
+			// Process post types logic.
+			$enabled_post_types  = array();
+			$disabled_post_types = array();
+			$allowed_post_types  = Settings::get_allowed_post_types();
+
+			foreach ( get_post_types( array( 'public' => true ), 'objects' ) as $post_type ) {
+				if ( 'attachment' === $post_type->name ) {
+					continue;
+				}
+
+				if ( in_array( $post_type->name, $allowed_post_types, true ) ) {
+					$enabled_post_types[] = $post_type->label;
+				} else {
+					$disabled_post_types[] = $post_type->label;
+				}
+			}
+
+			// Render read-only template.
+			iawmlf_render_template(
+				'admin/settings/link-fixer-readonly.php',
+				array(
+					'iawmlf_enabled'             => Settings::is_link_processing_enabled(),
+					'iawmlf_post_types_enabled'  => $enabled_post_types,
+					'iawmlf_post_types_disabled' => $disabled_post_types,
+					'iawmlf_scan_existing'       => Settings::should_scan_existing_posts(),
+					'iawmlf_fixer_option'        => Settings::get_fixer_option(),
+					'iawmlf_exclusions'          => Settings::get_link_exclusions(),
+					'iawmlf_check_duration'      => Settings::get_link_check_duration(),
+					'iawmlf_failure_threshold'   => Settings::get_failed_count(),
+				)
+			);
+		} else {
+			// Normal editable mode description.
+			echo '<p class="description">' . esc_html__( 'Enable the Link Fixer to scan links in your selected post types. It will find or create archived versions on the Internet Archive to ensure links remain accessible if they break.', 'internet-archive-wayback-machine-link-fixer' ) . '</p>';
+		}
+	}
+
+	/**
+	 * Renders Auto Archiver section - either description or read-only template.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @return void
+	 */
+	public function render_auto_archiver_section(): void {
+		// Check if sub-site in SHARED mode.
+		if ( is_multisite() && ! is_network_admin() && Environmental::get_links_table_mode() === Multisite::SHARED_LINKS_TABLE_MODE ) {
+			// Process post types logic.
+			$enabled_post_types  = array();
+			$disabled_post_types = array();
+			$allowed_post_types  = Settings::own_link_allowed_post_types();
+
+			foreach ( get_post_types( array( 'public' => true ), 'objects' ) as $post_type ) {
+				if ( 'attachment' === $post_type->name ) {
+					continue;
+				}
+
+				if ( in_array( $post_type->name, $allowed_post_types, true ) ) {
+					$enabled_post_types[] = $post_type->label;
+				} else {
+					$disabled_post_types[] = $post_type->label;
+				}
+			}
+
+			// Format update interval.
+			$update_interval = match ( (int) Settings::own_link_routine_update_interval() ) {
+				1 => __( 'Daily', 'internet-archive-wayback-machine-link-fixer' ),
+				7 => __( 'Weekly', 'internet-archive-wayback-machine-link-fixer' ),
+				30 => __( 'Monthly', 'internet-archive-wayback-machine-link-fixer' ),
+				default => sprintf(
+					/* translators: %d: Number of days */
+					__( 'Every %d days', 'internet-archive-wayback-machine-link-fixer' ),
+					(int) Settings::own_link_routine_update_interval()
+				),
+			};
+
+			// Render read-only template.
+			iawmlf_render_template(
+				'admin/settings/auto-archiver-readonly.php',
+				array(
+					'iawmlf_enabled'             => Settings::add_own_links(),
+					'iawmlf_post_types_enabled'  => $enabled_post_types,
+					'iawmlf_post_types_disabled' => $disabled_post_types,
+					'iawmlf_routinely_update'    => Settings::own_link_routinely_update(),
+					'iawmlf_update_interval'     => $update_interval,
+					'iawmlf_is_production'       => Environmental::is_production(),
+				)
+			);
+		} elseif ( Environmental::is_production() ) {
+				echo '<p class="description">' . esc_html__( 'Keep your content securely archived with the Auto Archiver. Each time you update a post, a fresh copy is saved to the Wayback Machine. Ensure your work remains accessible and preserved over time.', 'internet-archive-wayback-machine-link-fixer' ) . '</p>';
+		} else {
+			echo '<p class="description staging">' . esc_html__( 'Non-production environment detected - auto archiving is disabled to prevent staging and development sites from being archived.', 'internet-archive-wayback-machine-link-fixer' ) . '</p>';
+		}
+	}
+
+	/**
 	 * Render the post types field to select which post types to check.
 	 *
 	 * @since   1.0.0
@@ -700,7 +1047,7 @@ class Settings_Page {
 	 */
 	public function render_fixer_post_types_field(): void {
 		echo '<div class="iawmlf_settings_post_types">';
-		foreach ( get_post_types( array( 'public' => true ), 'objects' ) as $post_type ) {
+		foreach ( $this->get_post_types( array( 'public' => true ) ) as $post_type ) {
 			if ( 'attachment' === $post_type->name ) {
 				continue;
 			}
@@ -719,6 +1066,34 @@ class Settings_Page {
 			<?php
 		}
 		echo '</div><p class="description">' . esc_html__( 'Please choose which post types will have their content checked and links added to the Wayback Machine.', 'internet-archive-wayback-machine-link-fixer' ) . '</p>';
+	}
+
+	/**
+	 * Get all post types.
+	 *
+	 * @param array<string, mixed> $args The arguments to pass to get_post_types.
+	 *
+	 * @return array
+	 */
+	public function get_post_types( $args = array( 'public' => true ) ): array {
+		// If a multisite and on network admin, get the post types for all sites.
+		if ( is_multisite() && is_network_admin() ) {
+			$post_types = array();
+			// Switch to each site and get the post types.
+			foreach ( get_sites( array( 'number' => 999999 ) ) as $site ) {
+				switch_to_blog( absint( $site->blog_id ) );
+				$post_types = array_merge( $post_types, get_post_types( $args, 'objects' ) );
+				restore_current_blog();
+			}
+
+			// Remove duplicate post types.
+			$post_types = array_unique( $post_types, SORT_REGULAR );
+
+			return $post_types;
+		}
+
+		// If not multisite, or not on network admin, get the post types for the current site.
+		return get_post_types( $args, 'objects' );
 	}
 
 	/**
@@ -770,6 +1145,108 @@ class Settings_Page {
 			/><?php esc_html_e( 'If checked, this will remove all local data when the plugin is uninstalled. Leave unchecked if you plan to reinstall this plugin.', 'internet-archive-wayback-machine-link-fixer' ); ?>
 		</label>
 		<?php
+	}
+
+	/**
+	 * Render the multisite mode field.
+	 *
+	 * @since   1.4.0
+	 *
+	 * @return  void
+	 */
+	public function render_multisite_mode_field(): void {
+		$current_mode     = Settings::get_multisite_links_table_mode();
+		$is_network_admin = is_network_admin();
+
+		if ( $is_network_admin ) {
+			// Editable dropdown for network admin.
+			?>
+			<select
+				id="<?php echo esc_attr( Settings::MULTISITE_LINKS_TABLE_MODE ); ?>"
+				name="<?php echo esc_attr( Settings::MULTISITE_LINKS_TABLE_MODE ); ?>"
+				data-original-value="<?php echo esc_attr( $current_mode ); ?>"
+			>
+				<option value="<?php echo esc_attr( Multisite::SHARED_LINKS_TABLE_MODE ); ?>" <?php selected( $current_mode, Multisite::SHARED_LINKS_TABLE_MODE ); ?>>
+					<?php esc_html_e( 'Shared Links Table - All sites use a single shared links table', 'internet-archive-wayback-machine-link-fixer' ); ?>
+				</option>
+				<option value="<?php echo esc_attr( Multisite::SEPARATE_LINKS_TABLE_MODE ); ?>" <?php selected( $current_mode, Multisite::SEPARATE_LINKS_TABLE_MODE ); ?>>
+					<?php esc_html_e( 'Separate Links Tables - Each site has its own links table', 'internet-archive-wayback-machine-link-fixer' ); ?>
+				</option>
+			</select>
+			<p class="description">
+				<?php esc_html_e( 'Choose how links are stored across your multisite network.', 'internet-archive-wayback-machine-link-fixer' ); ?>
+			</p>
+			<div id="iawmlf_multisite_mode_confirm" class="iawmlf-confirm-change" style="display: none;">
+				<label>
+					<input
+						type="checkbox"
+						id="iawmlf_multisite_mode_confirm_checkbox"
+						name="iawmlf_multisite_mode_confirm_checkbox"
+						value="1"
+					/>
+					<strong><?php esc_html_e( 'I understand that changing this setting may affect how links are stored across all sites in the network.', 'internet-archive-wayback-machine-link-fixer' ); ?></strong>
+				</label>
+			</div>
+			<?php
+		} else {
+			// Read-only display for subsite admin.
+			$mode_label = Multisite::SHARED_LINKS_TABLE_MODE === $current_mode
+				? __( 'Shared Links Table - All sites use a single shared links table', 'internet-archive-wayback-machine-link-fixer' )
+				: __( 'Separate Links Tables - Each site has its own links table', 'internet-archive-wayback-machine-link-fixer' );
+			?>
+			<div class="iawmlf-readonly-setting">
+				<span class="iawmlf-readonly-badge">
+					<?php esc_html_e( 'Network Setting', 'internet-archive-wayback-machine-link-fixer' ); ?>
+				</span>
+				<span class="iawmlf-readonly-value">
+					<?php echo esc_html( $mode_label ); ?>
+				</span>
+				<p class="description">
+					<?php esc_html_e( 'This setting is managed at the network level. Contact your network administrator to change this value.', 'internet-archive-wayback-machine-link-fixer' ); ?>
+				</p>
+			</div>
+			<?php
+		}
+	}
+
+	/**
+	 * Render the multisite available sites field.
+	 *
+	 * @since   1.4.0
+	 *
+	 * @return  void
+	 */
+	public function render_multisite_available_sites_field(): void {
+		if ( ! is_network_admin() ) {
+			return;
+		}
+
+		$selected_sites = Settings::get_multisite_available_sites();
+		$all_sites      = get_sites( array( 'number' => 999999 ) );
+
+		echo '<div class="iawmlf_settings_sites_checkboxes">';
+
+		foreach ( $all_sites as $site ) {
+			$site_id    = (int) $site->blog_id;
+			$is_checked = null === $selected_sites || in_array( $site_id, $selected_sites, true );
+
+			?>
+			<label for="<?php echo esc_attr( Settings::MULTISITE_AVAILABLE_SITES . '_' . $site_id ); ?>">
+				<input
+					type="checkbox"
+					id="<?php echo esc_attr( Settings::MULTISITE_AVAILABLE_SITES . '_' . $site_id ); ?>"
+					name="<?php echo esc_attr( Settings::MULTISITE_AVAILABLE_SITES ); ?>[]"
+					value="<?php echo esc_attr( (string) $site_id ); ?>"
+					<?php checked( $is_checked ); ?>
+				/>
+				<?php echo esc_html( get_blog_details( $site_id )->blogname ); ?>
+				<span class="site-url">(<?php echo esc_html( get_site_url( $site_id ) ); ?>)</span>
+			</label>
+			<?php
+		}
+
+		echo '</div>';
+		echo '<p class="description">' . esc_html__( 'Select which sites can access this plugin. If no sites are selected, the plugin will be disabled on all sites.', 'internet-archive-wayback-machine-link-fixer' ) . '</p>';
 	}
 
 	/**
@@ -881,7 +1358,7 @@ class Settings_Page {
 			type="number"
 			id="<?php echo esc_attr( Settings::LINK_CHECK_DURATION_IN_DAYS ); ?>"
 			name="<?php echo esc_attr( Settings::LINK_CHECK_DURATION_IN_DAYS ); ?>"
-			value="<?php echo esc_attr( Settings::get_link_check_duration() ); ?>"
+			value="<?php echo esc_attr( (string) Settings::get_link_check_duration() ); ?>"
 			min="1"
 			style="width:80px;"
 			data-group="link_fixer"
@@ -905,7 +1382,7 @@ class Settings_Page {
 			type="number"
 			id="<?php echo esc_attr( Settings::MINIMUM_CHECKS_BEFORE_BROKEN ); ?>"
 			name="<?php echo esc_attr( Settings::MINIMUM_CHECKS_BEFORE_BROKEN ); ?>"
-			value="<?php echo esc_attr( Settings::get_failed_count() ); ?>"
+			value="<?php echo esc_attr( (string) Settings::get_failed_count() ); ?>"
 			min="1"
 			style="width:80px;"
 			data-group="link_fixer"
@@ -1084,7 +1561,7 @@ class Settings_Page {
 			type="number"
 			id="<?php echo esc_attr( Settings::ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL ); ?>"
 			name="<?php echo esc_attr( Settings::ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL ); ?>"
-			value="<?php echo esc_attr( $interval ); ?>"
+			value="<?php echo esc_attr( (string) $interval ); ?>"
 			min="1"
 			step="1"
 			data-group="auto_archiver"
