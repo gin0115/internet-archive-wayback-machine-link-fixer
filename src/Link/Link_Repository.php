@@ -589,8 +589,8 @@ class Link_Repository {
 	/**
 	 * Get the post id from link id.
 	 *
-	 * @param integer  $link_id The link id.
-	 * @param int|null $site_id Optional. Site ID to query. Null for current site.
+	 * @param integer      $link_id The link id.
+	 * @param integer|null $site_id Optional. Site ID to query. Null for current site.
 	 *
 	 * @return integer[]
 	 */
@@ -614,7 +614,7 @@ class Link_Repository {
 	 *
 	 * @since 1.2.0
 	 *
-	 * @param int|null $site_id Optional. Site ID to query. Null for current site.
+	 * @param integer|null $site_id Optional. Site ID to query. Null for current site.
 	 *
 	 * @return array
 	 */

@@ -69,12 +69,12 @@ class Dashboard_Page {
 		add_action( 'admin_menu', array( $this, 'rename_first_submenu_item' ), 999 );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 
-	// If we are loading a multisite dashboard.
-	if ( is_multisite() ) {
-		// Register the multisite dashboard page.
-		add_action( 'network_admin_menu', array( $this, 'register_multisite_page' ), 9 );
-		add_action( 'network_admin_menu', array( $this, 'rename_first_submenu_item' ), 999 );
-	}
+		// If we are loading a multisite dashboard.
+		if ( is_multisite() ) {
+			// Register the multisite dashboard page.
+			add_action( 'network_admin_menu', array( $this, 'register_multisite_page' ), 9 );
+			add_action( 'network_admin_menu', array( $this, 'rename_first_submenu_item' ), 999 );
+		}
 	}
 
 	/**

@@ -69,7 +69,7 @@ class Settings {
 
 	// Multisite options.
 	public const MULTISITE_LINKS_TABLE_MODE = self::SETTINGS_PREFIX . 'multisite_links_table_mode';
-	public const MULTISITE_AVAILABLE_SITES = self::SETTINGS_PREFIX . 'multisite_available_sites';
+	public const MULTISITE_AVAILABLE_SITES  = self::SETTINGS_PREFIX . 'multisite_available_sites';
 
 	/**
 	 * Gets the link table name.

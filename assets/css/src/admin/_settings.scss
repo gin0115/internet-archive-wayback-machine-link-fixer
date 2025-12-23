@@ -107,15 +107,24 @@
     }
 }
 
+// Read-only setting wrapper
+.iawmlf-readonly-wrapper {
+    padding: 20px;
+}
+
 // Read-only setting display
 .iawmlf-readonly-setting {
     background: #f6f7f7;
     border-left: 4px solid #72aee6;
     padding: 12px 16px;
     border-radius: 4px;
-    display: inline-block;
-    min-width: 300px;
-    max-width: 600px;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    .iawmlf_settings_postbox & {
+        padding-left: 10px;
+    }
 }
 
 .iawmlf-readonly-badge {
@@ -128,21 +137,77 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
 }
 
 .iawmlf-readonly-value {
-    font-weight: 600;
-    color: #2c3338;
     display: block;
-    font-size: 14px;
-    margin-top: 6px;
+    margin-top: 12px;
+    line-height: 1.6;
+    color: #1d2327;
+    font-size: 15px;
+    font-weight: 500;
+    &:first-of-type {
+        margin-top: 8px;
+    }
+    strong {
+        font-size: 11px;
+        color: #8c8f94;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        font-weight: 600;
+    }
+    // Inline values (label and value on same line)
+    &.iawmlf-inline {
+        strong {
+            display: inline;
+            margin-right: 8px;
+        }
+    }
+    // Stacked values (label on top, value below)
+    &.iawmlf-stacked {
+        strong {
+            display: block;
+            margin-bottom: 8px;
+        }
+    }
+    // Post types in 2 columns
+    &.iawmlf-post-types {
+        .iawmlf-post-types-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(200px, 1fr));
+            gap: 6px 24px;
+            width: fit-content;
+            margin: 0 auto;
+        }
+        .iawmlf-post-type-inactive {
+            opacity: 0.5;
+        }
+    }
+    // Excluded URLs - full width stacked
+    &.iawmlf-exclusions {
+        code {
+            display: block;
+            margin: 6px 0;
+            padding: 6px 10px;
+            background: #f0f0f1;
+            border-left: 3px solid #646970;
+            border-radius: 0;
+            word-break: break-all;
+            font-size: 13px;
+            color: #1d2327;
+            @media (min-width: 768px) {
+                margin: auto;
+                width: 80%;
+            }
+        }
+    }
 }
 
 .iawmlf-readonly-setting .description {
     color: #646970;
     font-style: italic;
-    margin: 8px 0 0 0;
+    margin: 16px 0 0 0;
     font-size: 13px;
 }
 

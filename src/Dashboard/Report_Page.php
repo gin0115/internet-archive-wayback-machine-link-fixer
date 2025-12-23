@@ -414,7 +414,7 @@ class Report_Page {
 				}
 
 				// Switch to site context to get post data and URLs.
-				switch_to_blog( $site->blog_id );
+				switch_to_blog( absint( $site->blog_id ) );
 
 				// Get post objects (filtering out nulls).
 				$posts = array_filter( array_map( 'get_post', array_unique( $post_ids ) ) );
@@ -433,14 +433,14 @@ class Report_Page {
 						: admin_url( 'edit.php?post_type=' . $post->post_type );
 
 					$post_data[] = array(
-						'id'               => $post->ID,
-						'title'            => $post->post_title,
-						'post_type'        => $post->post_type,
-						'post_type_label'  => $post_type_object ? $post_type_object->labels->singular_name : $post->post_type,
-						'post_type_link'   => $post_type_link,
-						'status'           => get_post_status( $post->ID ),
-						'edit_link'        => get_edit_post_link( $post->ID ),
-						'view_link'        => get_permalink( $post->ID ),
+						'id'              => $post->ID,
+						'title'           => $post->post_title,
+						'post_type'       => $post->post_type,
+						'post_type_label' => $post_type_object ? $post_type_object->labels->singular_name : $post->post_type,
+						'post_type_link'  => $post_type_link,
+						'status'          => get_post_status( $post->ID ),
+						'edit_link'       => get_edit_post_link( $post->ID ),
+						'view_link'       => get_permalink( $post->ID ),
 					);
 				}
 
@@ -471,14 +471,14 @@ class Report_Page {
 					: admin_url( 'edit.php?post_type=' . $post->post_type );
 
 				$post_data[] = array(
-					'id'               => $post->ID,
-					'title'            => $post->post_title,
-					'post_type'        => $post->post_type,
-					'post_type_label'  => $post_type_object ? $post_type_object->labels->singular_name : $post->post_type,
-					'post_type_link'   => $post_type_link,
-					'status'           => get_post_status( $post->ID ),
-					'edit_link'        => get_edit_post_link( $post->ID ),
-					'view_link'        => get_permalink( $post->ID ),
+					'id'              => $post->ID,
+					'title'           => $post->post_title,
+					'post_type'       => $post->post_type,
+					'post_type_label' => $post_type_object ? $post_type_object->labels->singular_name : $post->post_type,
+					'post_type_link'  => $post_type_link,
+					'status'          => get_post_status( $post->ID ),
+					'edit_link'       => get_edit_post_link( $post->ID ),
+					'view_link'       => get_permalink( $post->ID ),
 				);
 			}
 
