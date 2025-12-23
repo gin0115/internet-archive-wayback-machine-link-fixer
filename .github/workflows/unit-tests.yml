@@ -4,7 +4,7 @@ on:
   push:
     branches: [ trunk ]
   pull_request:
-    branches: [ trunk, develop ]
+    branches: [ trunk, develop, multisite ]
 
 jobs:
   build:
