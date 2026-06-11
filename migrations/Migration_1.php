@@ -30,16 +30,18 @@ class Migration_1 extends Abstract_Migration {
 	 *
 	 * @since 1.3.0
 	 *
+	 * @param string|null $table_name Optional table name.
+	 *
 	 * @return void
 	 */
-	public function up(): void {
+	public function up( ?string $table_name = null ): void {
 		// Create the report table.
 		global $wpdb;
 
 		$charset_collate = $wpdb->get_charset_collate();
 
 		// Create the link cache table.
-		$link_cache_table_name = Settings::get_link_table_name();
+		$link_cache_table_name = $table_name ?? Settings::get_link_table_name();
 
 		$link_cache_sql = "CREATE TABLE $link_cache_table_name (
 			id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -65,13 +67,15 @@ class Migration_1 extends Abstract_Migration {
 	 *
 	 * @since 1.3.0
 	 *
+	 * @param string|null $table_name Optional table name.
+	 *
 	 * @return void
 	 */
-	public function down(): void {
+	public function down( ?string $table_name = null ): void {
 		global $wpdb;
 
 		// Drop the log table.
-		$link_table = Settings::get_link_table_name();
+		$link_table = $table_name ?? Settings::get_link_table_name();
 		$wpdb->query( "DROP TABLE IF EXISTS $link_table" ); //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, cant due to table name.
 	}
 }

@@ -15,6 +15,7 @@ use Internet_Archive\Wayback_Machine_Link_Fixer\Util\Environmental;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Setup_Wizard;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Dashboard_Page;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Multisite;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Table_Clone_State;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -52,7 +53,7 @@ class Settings_Page {
 		add_action( 'admin_menu', array( $this, 'register_page' ), 20, 0 );
 		add_action( 'admin_init', array( $this, 'validate_archive_org_keys' ), 1 );
 
-		if ( is_multisite() ) {
+		if ( Multisite::is_network_active() ) {
 			add_action( 'network_admin_menu', array( $this, 'register_network_page' ), 20 );
 			add_action( 'network_admin_edit_iawmlf_net_settings_save', array( $this, 'handle_network_settings_save' ) );
 		}
@@ -102,8 +103,8 @@ class Settings_Page {
 			array( $this, 'render_page' )
 		);
 
-		// If the setup has not been completed, add a on load hook.
-		if ( ! Settings::is_wizard_completed() ) {
+		// If the setup has not been completed, redirect to wizard (not on multisite sub-sites — network handles it).
+		if ( ! Settings::is_wizard_completed() && ! Multisite::is_network_active() ) {
 			add_action( 'load-' . $this->menu_hook, array( $this, 'redirect_to_setup_wizard' ) );
 		}
 	}
@@ -325,6 +326,59 @@ class Settings_Page {
 
 		wp_enqueue_script( self::PAGE_SLUG );
 
+		// Conditionally enqueue multisite clone script.
+		if ( Multisite::is_network_active() ) {
+			wp_register_script(
+				'iawmlf-multisite-clone',
+				IAWMLF_URL . 'assets/js/build/admin_multisite_clone.js',
+				array( self::PAGE_SLUG ),
+				IAWMLF_VERSION,
+				true
+			);
+
+			wp_localize_script(
+				'iawmlf-multisite-clone',
+				'IawmlfCloneSettings',
+				array(
+					'ajaxUrl'                => admin_url( 'admin-ajax.php' ),
+					'cloneStartAction'       => \Internet_Archive\Wayback_Machine_Link_Fixer\Ajax\Clone_Start_Ajax::ACTION,
+					'cloneStartNonce'        => wp_create_nonce( \Internet_Archive\Wayback_Machine_Link_Fixer\Ajax\Clone_Start_Ajax::NONCE ),
+					'cloneProcessSiteAction' => \Internet_Archive\Wayback_Machine_Link_Fixer\Ajax\Clone_Process_Site_Ajax::ACTION,
+					'cloneProcessSiteNonce'  => wp_create_nonce( \Internet_Archive\Wayback_Machine_Link_Fixer\Ajax\Clone_Process_Site_Ajax::NONCE ),
+					'cloneDismissAction'     => \Internet_Archive\Wayback_Machine_Link_Fixer\Ajax\Clone_Dismiss_Ajax::ACTION,
+					'cloneDismissNonce'      => wp_create_nonce( \Internet_Archive\Wayback_Machine_Link_Fixer\Ajax\Clone_Dismiss_Ajax::NONCE ),
+					'multisiteSites'         => $this->get_multisite_sites_for_js(),
+				)
+			);
+
+			wp_localize_script(
+				'iawmlf-multisite-clone',
+				'IawmlfCloneTemplates',
+				array(
+					/* translators: %1$d: number of skipped sites */
+					'skippedHeading'  => __( 'Skipped %1$d site(s) due to errors:', 'internet-archive-wayback-machine-link-fixer' ),
+					/* translators: %1$s: site ID, %2$s: error message */
+					'skippedSiteItem' => __( 'Site %1$s: %2$s', 'internet-archive-wayback-machine-link-fixer' ),
+					'completedLabel'  => __( 'Completed', 'internet-archive-wayback-machine-link-fixer' ),
+					'completedErrors' => __( 'Completed with errors', 'internet-archive-wayback-machine-link-fixer' ),
+					/* translators: %1$d: completed count, %2$d: total count */
+					'finishedLog'     => __( 'Clone process finished. %1$d of %2$d sites completed.', 'internet-archive-wayback-machine-link-fixer' ),
+					/* translators: %1$d: number of remaining sites */
+					'resumingLog'     => __( 'Resuming migration — %1$d site(s) remaining.', 'internet-archive-wayback-machine-link-fixer' ),
+					/* translators: %1$s: site ID */
+					'retryingLog'     => __( 'Retrying site %1$s...', 'internet-archive-wayback-machine-link-fixer' ),
+					/* translators: %1$s: site ID, %2$s: error message */
+					'skippingLog'     => __( 'Skipping site %1$s after retry: %2$s', 'internet-archive-wayback-machine-link-fixer' ),
+					/* translators: %1$s: site ID */
+					'requestFailed'   => __( 'Request failed for site %1$s, retrying...', 'internet-archive-wayback-machine-link-fixer' ),
+					/* translators: %1$d: completed sites, %2$d: total sites, %3$s: percentage */
+					'progressText'    => __( '%1$d of %2$d sites completed (%3$s%%)', 'internet-archive-wayback-machine-link-fixer' ),
+				)
+			);
+
+			wp_enqueue_script( 'iawmlf-multisite-clone' );
+		}
+
 		//  Register the styles.
 		wp_enqueue_style(
 			self::PAGE_SLUG,
@@ -365,7 +419,10 @@ class Settings_Page {
 		do_settings_sections( self::PAGE_SLUG );
 		settings_fields( self::PAGE_SLUG );
 
-		submit_button( __( 'Save Changes', 'internet-archive-wayback-machine-link-fixer' ) );
+		// Only show submit button if there are editable fields (not on multisite sub-sites).
+		if ( ! Multisite::is_network_active() ) {
+			submit_button( __( 'Save Changes', 'internet-archive-wayback-machine-link-fixer' ) );
+		}
 
 		echo '</form></div>';
 	}
@@ -413,7 +470,7 @@ class Settings_Page {
 			)
 		);
 		// Only register in network admin or non-multisite.
-		if ( ! is_multisite() || is_network_admin() ) {
+		if ( ! Multisite::is_subsite() ) {
 			register_setting(
 				self::PAGE_SLUG,
 				Settings::DROP_TABLES_ON_UNINSTALL_KEY,
@@ -505,7 +562,7 @@ class Settings_Page {
 		);
 
 		// Only register in network admin or non-multisite.
-		if ( ! is_multisite() || is_network_admin() ) {
+		if ( ! Multisite::is_subsite() ) {
 			register_setting(
 				self::PAGE_SLUG,
 				Settings::ARCHIVE_ORG_SECRET_KEY,
@@ -611,7 +668,7 @@ class Settings_Page {
 		);
 
 		// Register multisite mode setting (network-wide only).
-		if ( is_multisite() ) {
+		if ( Multisite::is_network_active() ) {
 			register_setting(
 				self::PAGE_SLUG,
 				Settings::MULTISITE_LINKS_TABLE_MODE,
@@ -662,7 +719,7 @@ class Settings_Page {
 		);
 
 		// Only show Archive.org API section in network admin or non-multisite.
-		if ( ! is_multisite() || is_network_admin() ) {
+		if ( ! Multisite::is_subsite() ) {
 			add_settings_section(
 				self::GROUP_IA_SETTINGS,
 				__( 'Archive.org API', 'internet-archive-wayback-machine-link-fixer' ),
@@ -701,8 +758,8 @@ class Settings_Page {
 			)
 		);
 
-		// Only register Link Fixer fields if NOT sub-site in SHARED mode.
-		if ( ! is_multisite() || is_network_admin() || Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE ) {
+		// Only register Link Fixer fields on single site or network admin. Sub-sites always get read-only.
+		if ( ! Multisite::is_subsite() ) {
 			add_settings_field(
 				Settings::PROCESS_LINKS,
 				__( 'Enable Link Fixer', 'internet-archive-wayback-machine-link-fixer' ),
@@ -767,7 +824,7 @@ class Settings_Page {
 		}
 
 		// Only show in network admin or non-multisite.
-		if ( ! is_multisite() || is_network_admin() ) {
+		if ( ! Multisite::is_subsite() ) {
 			add_settings_field(
 				Settings::DROP_TABLES_ON_UNINSTALL_KEY,
 				__( 'Wipe Data on Uninstall', 'internet-archive-wayback-machine-link-fixer' ),
@@ -778,7 +835,7 @@ class Settings_Page {
 		}
 
 		// Add multisite mode field (only in multisite installations).
-		if ( is_multisite() ) {
+		if ( Multisite::is_network_active() ) {
 			add_settings_field(
 				Settings::MULTISITE_LINKS_TABLE_MODE,
 				__( 'Multisite Mode', 'internet-archive-wayback-machine-link-fixer' ),
@@ -788,7 +845,7 @@ class Settings_Page {
 			);
 
 			// Add available sites field (only in network admin).
-			if ( is_network_admin() ) {
+			if ( Multisite::is_network() ) {
 				add_settings_field(
 					Settings::MULTISITE_AVAILABLE_SITES,
 					__( 'Available on Sites', 'internet-archive-wayback-machine-link-fixer' ),
@@ -800,7 +857,7 @@ class Settings_Page {
 		}
 
 		// Only show in network admin or non-multisite.
-		if ( ! is_multisite() || is_network_admin() ) {
+		if ( ! Multisite::is_subsite() ) {
 			$empty_api_creds = '' === Settings::get_archive_access_key() && '' === Settings::get_archive_secret_key();
 
 			add_settings_field(
@@ -826,8 +883,8 @@ class Settings_Page {
 			);
 		}
 
-		// Only register Auto Archiver fields if NOT sub-site in SHARED mode.
-		if ( ! is_multisite() || is_network_admin() || Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE ) {
+		// Only register Auto Archiver fields on single site or network admin. Sub-sites always get read-only.
+		if ( ! Multisite::is_subsite() ) {
 			add_settings_field(
 				Settings::ALLOW_OWN_CONTENT_SUBMISSIONS,
 				__( 'Auto Archive Posts', 'internet-archive-wayback-machine-link-fixer' ),
@@ -941,8 +998,8 @@ class Settings_Page {
 	 * @return void
 	 */
 	public function render_link_fixer_section(): void {
-		// Check if sub-site in SHARED mode.
-		if ( is_multisite() && ! is_network_admin() && Environmental::get_links_table_mode() === Multisite::SHARED_LINKS_TABLE_MODE ) {
+		// Sub-sites always get read-only view — settings are managed at network level.
+		if ( Multisite::is_subsite() ) {
 			// Process post types logic.
 			$enabled_post_types  = array();
 			$disabled_post_types = array();
@@ -988,8 +1045,8 @@ class Settings_Page {
 	 * @return void
 	 */
 	public function render_auto_archiver_section(): void {
-		// Check if sub-site in SHARED mode.
-		if ( is_multisite() && ! is_network_admin() && Environmental::get_links_table_mode() === Multisite::SHARED_LINKS_TABLE_MODE ) {
+		// Sub-sites always get read-only view — settings are managed at network level.
+		if ( Multisite::is_subsite() ) {
 			// Process post types logic.
 			$enabled_post_types  = array();
 			$disabled_post_types = array();
@@ -1077,7 +1134,7 @@ class Settings_Page {
 	 */
 	public function get_post_types( $args = array( 'public' => true ) ): array {
 		// If a multisite and on network admin, get the post types for all sites.
-		if ( is_multisite() && is_network_admin() ) {
+		if ( Multisite::is_network() ) {
 			$post_types = array();
 			// Switch to each site and get the post types.
 			foreach ( get_sites( array( 'number' => 999999 ) ) as $site ) {
@@ -1155,8 +1212,19 @@ class Settings_Page {
 	 * @return  void
 	 */
 	public function render_multisite_mode_field(): void {
-		$current_mode     = Settings::get_multisite_links_table_mode();
-		$is_network_admin = is_network_admin();
+		$current_mode          = Settings::get_multisite_links_table_mode();
+		$is_network_admin      = Multisite::is_network();
+		$clone_state           = Table_Clone_State::load();
+
+		// $clone_state = Table_Clone_State::from_global( array( 1, 2, 3 ), true, true, true );
+		// $clone_state->set_sites_completed([1,2]);
+		// $clone_state->set_status( Table_Clone_State::STATUS_ERROR );
+		// $clone_state->set_status( Table_Clone_State::STATUS_IDLE );
+		// $clone_state->set_status( Table_Clone_State::STATUS_IDLE );
+
+		$show_cloning_progress = $clone_state && in_array( $clone_state->get_status(), array( Table_Clone_State::STATUS_ERROR, Table_Clone_State::STATUS_RUNNING, Table_Clone_State::STATUS_COMPLETED ), true );
+
+		dump( $clone_state, \get_defined_vars() );
 
 		if ( $is_network_admin ) {
 			// Editable dropdown for network admin.
@@ -1176,17 +1244,8 @@ class Settings_Page {
 			<p class="description">
 				<?php esc_html_e( 'Choose how links are stored across your multisite network.', 'internet-archive-wayback-machine-link-fixer' ); ?>
 			</p>
-			<div id="iawmlf_multisite_mode_confirm" class="iawmlf-confirm-change" style="display: none;">
-				<label>
-					<input
-						type="checkbox"
-						id="iawmlf_multisite_mode_confirm_checkbox"
-						name="iawmlf_multisite_mode_confirm_checkbox"
-						value="1"
-					/>
-					<strong><?php esc_html_e( 'I understand that changing this setting may affect how links are stored across all sites in the network.', 'internet-archive-wayback-machine-link-fixer' ); ?></strong>
-				</label>
-			</div>
+			<?php iawmlf_render_template( 'admin/settings/clone-config.php' ); ?>
+
 			<?php
 		} else {
 			// Read-only display for subsite admin.
@@ -1207,6 +1266,19 @@ class Settings_Page {
 			</div>
 			<?php
 		}
+		?>
+		<div id="iawmlf_multisite_progress" class="iawmlf-progress-message-<?php echo esc_attr( $clone_state ? $clone_state->get_status() : 'idle' ); ?>" style="<?php echo $show_cloning_progress ? 'display: block;' : 'display: none;'; ?>">
+			<?php
+			iawmlf_render_template(
+				'admin/settings/clone-status.php',
+				array(
+					'iawmlf_clone_state' => $clone_state,
+					'iawmlf_all_sites'   => $this->get_multisite_sites_for_js(),
+				)
+			);
+			?>
+		</div>
+		<?php
 	}
 
 	/**
@@ -1217,7 +1289,7 @@ class Settings_Page {
 	 * @return  void
 	 */
 	public function render_multisite_available_sites_field(): void {
-		if ( ! is_network_admin() ) {
+		if ( ! Multisite::is_network() ) {
 			return;
 		}
 
@@ -1570,6 +1642,33 @@ class Settings_Page {
 			<?php esc_html_e( 'Interval in days for regular archiving.', 'internet-archive-wayback-machine-link-fixer' ); ?>
 		</p>
 		<?php
+	}
+
+	/**
+	 * Get multisite sites data for JavaScript.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @return array<int, array{id: int, name: string}>
+	 */
+	private function get_multisite_sites_for_js(): array {
+		if ( ! Multisite::is_network_active() ) {
+			return array();
+		}
+
+		$sites  = get_sites( array( 'number' => 999999 ) );
+		$result = array();
+
+		foreach ( $sites as $site ) {
+			$site_id  = (int) $site->blog_id;
+			$details  = get_blog_details( $site_id );
+			$result[] = array(
+				'id'   => $site_id,
+				'name' => $details ? $details->blogname : sprintf( 'Site %d', $site_id ),
+			);
+		}
+
+		return $result;
 	}
 }
 

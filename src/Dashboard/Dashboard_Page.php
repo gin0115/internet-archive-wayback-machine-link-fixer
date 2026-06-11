@@ -13,6 +13,7 @@ namespace Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Link\Link;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Settings\Settings;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Link\Link_Repository;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Multisite;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -70,7 +71,7 @@ class Dashboard_Page {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 
 		// If we are loading a multisite dashboard.
-		if ( is_multisite() ) {
+		if ( Multisite::is_network_active() ) {
 			// Register the multisite dashboard page.
 			add_action( 'network_admin_menu', array( $this, 'register_multisite_page' ), 9 );
 			add_action( 'network_admin_menu', array( $this, 'rename_first_submenu_item' ), 999 );

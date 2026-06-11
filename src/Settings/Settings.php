@@ -70,6 +70,7 @@ class Settings {
 	// Multisite options.
 	public const MULTISITE_LINKS_TABLE_MODE = self::SETTINGS_PREFIX . 'multisite_links_table_mode';
 	public const MULTISITE_AVAILABLE_SITES  = self::SETTINGS_PREFIX . 'multisite_available_sites';
+	public const TABLE_CLONE_STATE          = self::SETTINGS_PREFIX . 'table_clone_state';
 
 	/**
 	 * Gets the link table name.
@@ -82,13 +83,39 @@ class Settings {
 		global $wpdb;
 
 		// If not multisite, return the normal table name.
-		if ( ! is_multisite() ) {
+		if ( ! Multisite::is_network_active() ) {
 			return $wpdb->prefix . self::LINK_TABLE;
 		}
 
-		return Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE
+		return Multisite::is_separate_mode()
 			? $wpdb->get_blog_prefix( get_current_blog_id() ) . self::LINK_TABLE
 			: $wpdb->base_prefix . self::LINK_TABLE;
+	}
+
+	/**
+	 * Get the multisite shared table name.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @return string
+	 */
+	public static function get_shared_multisite_link_table_name(): string {
+		global $wpdb;
+		return $wpdb->base_prefix . self::LINK_TABLE;
+	}
+
+	/**
+	 * Get a sub sites table name.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @param integer $site_id The site ID.
+	 *
+	 * @return string
+	 */
+	public static function get_subsite_link_table_name( int $site_id ): string {
+		global $wpdb;
+		return $wpdb->get_blog_prefix( $site_id ) . self::LINK_TABLE;
 	}
 
 	/**
@@ -118,12 +145,16 @@ class Settings {
 	/**
 	 * Should the tables be dropped when the plugin is deactivated?
 	 *
+	 * When called from a multisite, it checks the network option, as its always network wide.
+	 *
 	 * @since 0.1.0
 	 *
 	 * @return boolean
 	 */
 	public static function drop_tables_on_uninstall(): bool {
-		return (bool) get_option( self::DROP_TABLES_ON_UNINSTALL_KEY, false );
+		return Multisite::is_network_active()
+			? (bool) get_network_option( null, self::DROP_TABLES_ON_UNINSTALL_KEY, false )
+			: (bool) get_option( self::DROP_TABLES_ON_UNINSTALL_KEY, false );
 	}
 
 	/**
@@ -131,10 +162,16 @@ class Settings {
 	 *
 	 * @since 0.1.0
 	 *
+	 * @param boolean $ignore_multisite_mode Optional ignore multisite mode. Default false.
+	 *
 	 * @return class-string<Abstract_Migration>[]
 	 */
-	public static function migrations(): array {
-		return (array) get_option( self::MIGRATIONS_KEY, array() );
+	public static function migrations( bool $ignore_multisite_mode = false ): array {
+		if ( $ignore_multisite_mode ) {
+			return (array) get_option( self::MIGRATIONS_KEY, array() );
+		}
+
+		return (array) self::get_multisite_aware_option( self::MIGRATIONS_KEY, array() );
 	}
 
 	/**
@@ -142,12 +179,17 @@ class Settings {
 	 *
 	 * @since 0.1.0
 	 *
-	 * @param class-string<Abstract_Migration>[] $migrations The migrations to update.
+	 * @param class-string<Abstract_Migration>[] $migrations            The migrations to update.
+	 * @param boolean                            $ignore_multisite_mode Optional ignore multisite mode. Default false.
 	 *
 	 * @return void
 	 */
-	public static function update_migrations( array $migrations ): void {
-		update_option( self::MIGRATIONS_KEY, $migrations, false );
+	public static function update_migrations( array $migrations, bool $ignore_multisite_mode = false ): void {
+		if ( $ignore_multisite_mode ) {
+			update_option( self::MIGRATIONS_KEY, $migrations, false );
+		} else {
+			self::update_multisite_aware_option( self::MIGRATIONS_KEY, $migrations );
+		}
 	}
 
 	/**
@@ -586,7 +628,7 @@ class Settings {
 			$mode = Multisite::SHARED_LINKS_TABLE_MODE;
 		}
 
-		if ( is_multisite() ) {
+		if ( Multisite::is_network_active() ) {
 			update_network_option( get_current_network_id(), self::MULTISITE_LINKS_TABLE_MODE, $mode );
 		} else {
 			update_option( self::MULTISITE_LINKS_TABLE_MODE, $mode );
@@ -602,7 +644,7 @@ class Settings {
 	 */
 	public static function get_multisite_links_table_mode(): string {
 		$default = Multisite::SHARED_LINKS_TABLE_MODE;
-		$mode    = is_multisite()
+		$mode    = Multisite::is_network_active()
 			? get_network_option( get_current_network_id(), self::MULTISITE_LINKS_TABLE_MODE, $default )
 			: get_option( self::MULTISITE_LINKS_TABLE_MODE, $default );
 
@@ -619,7 +661,7 @@ class Settings {
 	 * @return array|null Null = all sites, empty array = no sites, array of IDs = specific sites
 	 */
 	public static function get_multisite_available_sites(): ?array {
-		if ( ! is_multisite() ) {
+		if ( ! Multisite::is_network_active() ) {
 			return null;
 		}
 
@@ -637,7 +679,7 @@ class Settings {
 	 * @return void
 	 */
 	public static function set_multisite_available_sites( ?array $sites ): void {
-		if ( ! is_multisite() ) {
+		if ( ! Multisite::is_network_active() ) {
 			return;
 		}
 
@@ -656,9 +698,10 @@ class Settings {
 	 * @return mixed
 	 */
 	private static function get_multisite_aware_option( string $key, $default_value = false ) {
-		return ( ! is_multisite() || Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE )
-			? get_option( $key, $default_value )
-			: get_network_option( get_current_network_id(), $key, $default_value );
+		// On multisite, settings are always stored at network level regardless of links table mode.
+		return Multisite::is_network_active()
+			? get_network_option( get_current_network_id(), $key, $default_value )
+			: get_option( $key, $default_value );
 	}
 
 	/**
@@ -673,9 +716,10 @@ class Settings {
 	 * @return boolean
 	 */
 	private static function update_multisite_aware_option( string $key, $value, $autoload = null ) {
-		return ( ! is_multisite() || Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE )
-			? update_option( $key, $value, $autoload )
-			: update_network_option( get_current_network_id(), $key, $value );
+		// On multisite, settings are always stored at network level regardless of links table mode.
+		return Multisite::is_network_active()
+			? update_network_option( get_current_network_id(), $key, $value )
+			: update_option( $key, $value, $autoload );
 	}
 
 	/**
@@ -688,9 +732,10 @@ class Settings {
 	 * @return boolean
 	 */
 	private static function delete_multisite_aware_option( string $key ) {
-		return ( ! is_multisite() || Environmental::get_links_table_mode() === Multisite::SEPARATE_LINKS_TABLE_MODE )
-			? delete_option( $key )
-			: delete_network_option( get_current_network_id(), $key );
+		// On multisite, settings are always stored at network level regardless of links table mode.
+		return Multisite::is_network_active()
+			? delete_network_option( get_current_network_id(), $key )
+			: delete_option( $key );
 	}
 
 	/**

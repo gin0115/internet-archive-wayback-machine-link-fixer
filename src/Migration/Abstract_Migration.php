@@ -22,16 +22,20 @@ abstract class Abstract_Migration {
 	 *
 	 * @since 0.1.0
 	 *
+	 * @param string|null $table_name Optional table name.
+	 *
 	 * @return void
 	 */
-	abstract public function up(): void;
+	abstract public function up( ?string $table_name = null ): void;
 
 	/**
 	 * Runs when on drop/deactivation
 	 *
 	 * @since 0.1.0
 	 *
+	 * @param string|null $table_name Optional table name.
+	 *
 	 * @return void
 	 */
-	abstract public function down(): void;
+	abstract public function down( ?string $table_name = null ): void;
 }

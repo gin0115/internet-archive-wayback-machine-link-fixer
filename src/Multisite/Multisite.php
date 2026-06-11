@@ -34,6 +34,51 @@ class Multisite {
 	const SEPARATE_LINKS_TABLE_MODE = 'separate';
 
 	/**
+	 * Is this a multisite install with the plugin network-activated?
+	 *
+	 * @return boolean
+	 */
+	public static function is_network_active(): bool {
+		return is_multisite();
+	}
+
+	/**
+	 * Are we on a multisite sub-site admin (not network admin)?
+	 *
+	 * @return boolean
+	 */
+	public static function is_subsite(): bool {
+		return is_multisite() && ! is_network_admin();
+	}
+
+	/**
+	 * Are we on the network admin?
+	 *
+	 * @return boolean
+	 */
+	public static function is_network(): bool {
+		return is_multisite() && is_network_admin();
+	}
+
+	/**
+	 * Is the links table mode set to shared?
+	 *
+	 * @return boolean
+	 */
+	public static function is_shared_mode(): bool {
+		return is_multisite() && Settings::get_multisite_links_table_mode() === self::SHARED_LINKS_TABLE_MODE;
+	}
+
+	/**
+	 * Is the links table mode set to separate?
+	 *
+	 * @return boolean
+	 */
+	public static function is_separate_mode(): bool {
+		return is_multisite() && Settings::get_multisite_links_table_mode() === self::SEPARATE_LINKS_TABLE_MODE;
+	}
+
+	/**
 	 * Setup the multisite functionality.
 	 *
 	 * @param boolean $network_wide Whether the plugin is being activated network wide.
@@ -61,7 +106,7 @@ class Multisite {
 	 */
 	public static function should_enable_site( ?int $site_id = null ): bool {
 		// If not multisite, return true.
-		if ( ! is_multisite() ) {
+		if ( ! self::is_network_active() ) {
 			return true;
 		}
 

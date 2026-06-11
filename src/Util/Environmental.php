@@ -13,6 +13,7 @@ declare( strict_types=1 );
 namespace Internet_Archive\Wayback_Machine_Link_Fixer\Util;
 
 use Internet_Archive\Wayback_Machine_Link_Fixer\Settings\Settings;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Multisite;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -46,7 +47,7 @@ class Environmental {
 	 * @return 'shared'|'separate'|null Returns the links table mode or null if not set.
 	 */
 	public static function get_links_table_mode() {
-		if ( ! is_multisite() ) {
+		if ( ! Multisite::is_network_active() ) {
 			return null;
 		}
 

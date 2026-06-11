@@ -12,6 +12,10 @@ declare(strict_types=1);
 
 namespace Internet_Archive\Wayback_Machine_Link_Fixer\Event;
 
+// use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Event\Migrate_From_Shared_To_Per_Site_Event;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Event\Merge_Duplicate_Links_Batch_Event;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Event\Recheck_Links_Batch_Event;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -35,6 +39,13 @@ class Event_Controller {
 		add_action( Check_Archive_Services_Online_Event::HANDLE, new Check_Archive_Services_Online_Event(), 10, 0 );
 		add_action( Process_Local_Post_Event::HANDLE, new Process_Local_Post_Event(), 10, 1 );
 		add_action( Scan_Own_Posts_Event::HANDLE, new Scan_Own_Posts_Event(), 10, 0 );
+		// Multisite migration events — now handled via AJAX batch runner, not Action Scheduler.
+		// add_action( Migrate_From_Shared_To_Per_Site_Event::HANDLE, new Migrate_From_Shared_To_Per_Site_Event(), 10, 1 );
+
+		// Separate-to-shared merge + recheck pipeline.
+		add_action( Merge_Duplicate_Links_Batch_Event::HANDLE, new Merge_Duplicate_Links_Batch_Event(), 10, 2 );
+		add_action( Recheck_Links_Batch_Event::HANDLE, new Recheck_Links_Batch_Event(), 10, 1 );
+
 		// Ensure the post scan event is added to the action scheduler.
 		add_action( 'init', array( Scan_Posts_Event::class, 'add_to_action_scheduler' ) );
 		add_action( 'init', array( Scan_Own_Posts_Event::class, 'add_to_action_scheduler' ) );

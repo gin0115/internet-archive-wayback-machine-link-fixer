@@ -11,6 +11,9 @@ declare( strict_types = 1 );
 namespace Internet_Archive\Wayback_Machine_Link_Fixer\Ajax;
 
 use Internet_Archive\Wayback_Machine_Link_Fixer\Ajax\Link_Check_Ajax;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Ajax\Clone_Start_Ajax;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Ajax\Clone_Process_Site_Ajax;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Ajax\Clone_Dismiss_Ajax;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -26,5 +29,8 @@ class Ajax_Controller {
 	 */
 	public function initialize(): void {
 		Link_Check_Ajax::register_ajax_call();
+		Clone_Start_Ajax::register_ajax_call();
+		Clone_Process_Site_Ajax::register_ajax_call();
+		Clone_Dismiss_Ajax::register_ajax_call();
 	}
 }

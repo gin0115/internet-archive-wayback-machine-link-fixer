@@ -15,6 +15,7 @@ namespace Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Event\Scan_Posts_Event;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Settings\Settings;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Util\Environmental;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Multisite;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -92,6 +93,11 @@ class Setup_Wizard {
 			return;
 		}
 
+		// On multisite sub-sites, wizard is handled at network level — no notice.
+		if ( Multisite::is_subsite() ) {
+			return;
+		}
+
 		if ( isset( $_GET['page'] ) && self::PAGE_SLUG === $_GET['page'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			return;
 		}
@@ -117,6 +123,11 @@ class Setup_Wizard {
 	 */
 	public function maybe_trigger_onboarding_wizard(): void {
 		if ( wp_doing_ajax() || ( defined( 'DOING_CRON' ) && DOING_CRON ) ) {
+			return;
+		}
+
+		// On multisite sub-sites, wizard is handled at network level — never redirect.
+		if ( Multisite::is_subsite() ) {
 			return;
 		}
 

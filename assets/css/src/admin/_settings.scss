@@ -250,6 +250,13 @@
     border: 1px solid #dcdcde;
     border-radius: 4px;
     background: #f6f7f7;
+    transition: opacity 0.2s ease;
+
+    &.iawmlf-disabled {
+        opacity: 0.5;
+        pointer-events: none;
+    }
+
     label {
         display: flex;
         align-items: center;
@@ -270,5 +277,375 @@
             font-size: 12px;
             margin-left: 4px;
         }
+    }
+}
+
+// Clone status UI
+.iawmlf-clone-status {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    margin-top: 16px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+}
+
+.iawmlf-clone-section {
+    padding: 12px 16px;
+    border-bottom: 1px solid #e5e5e5;
+    &:last-child {
+        border-bottom: none;
+    }
+}
+
+.iawmlf-status-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.iawmlf-status-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1d2327;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.iawmlf-clone-type {
+    font-size: 11px;
+    font-weight: 500;
+    color: #50575e;
+    background: #f0f0f1;
+    padding: 2px 8px;
+    border-radius: 3px;
+}
+
+.iawmlf-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    .dashicons {
+        font-size: 14px;
+        width: 14px;
+        height: 14px;
+    }
+    &.iawmlf-status-running {
+        background: #fff3cd;
+        color: #856404;
+    }
+    &.iawmlf-status-completed {
+        background: #edfaef;
+        color: #1e7e34;
+    }
+    &.iawmlf-status-error {
+        background: #fef1f1;
+        color: #d63638;
+    }
+    &.iawmlf-status-idle {
+        background: #f0f0f1;
+        color: #50575e;
+    }
+}
+
+// Progress section
+.iawmlf-progress-info {
+    padding: 16px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.iawmlf-progress-bar {
+    background: #e1e1e1;
+    border-radius: 4px;
+    height: 20px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.iawmlf-progress-fill {
+    background: linear-gradient(90deg, #2271b1, #135e96);
+    height: 100%;
+    transition: width 0.3s ease;
+    border-radius: 4px;
+    position: relative;
+    min-width: 2%;
+}
+
+.iawmlf-progress-text {
+    font-size: 13px;
+    color: #50575e;
+    text-align: center;
+}
+
+// Section label
+.iawmlf-section-label {
+    margin: 0 0 10px 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1d2327;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+// Sites list with badges
+.iawmlf-sites-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.iawmlf-site-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 500;
+    .dashicons {
+        font-size: 14px;
+        width: 14px;
+        height: 14px;
+    }
+    &.iawmlf-site-completed {
+        background: #edfaef;
+        color: #1e7e34;
+        border: 1px solid #c6e6c8;
+    }
+    &.iawmlf-site-pending {
+        background: #f0f0f1;
+        color: #50575e;
+        border: 1px solid #dcdcde;
+    }
+}
+
+// Options as inline text
+.iawmlf-clone-options-text {
+    margin: 0;
+    padding: 10px 16px;
+    font-size: 13px;
+    color: #50575e;
+    border-bottom: 1px solid #f0f0f1;
+
+    strong {
+        color: #1d2327;
+        margin-right: 6px;
+    }
+}
+
+.iawmlf-option-enabled {
+    color: #1e7e34;
+    margin-right: 16px;
+}
+
+.iawmlf-option-disabled {
+    color: #a7aaad;
+    text-decoration: line-through;
+    margin-right: 16px;
+}
+
+// Logs section
+.iawmlf-clone-logs {
+    padding: 0;
+    border-bottom: none;
+}
+
+.iawmlf-logs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: #f8f9fa;
+    cursor: pointer;
+    user-select: none;
+    &:hover {
+        background: #f0f0f1;
+    }
+}
+
+.iawmlf-logs-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1d2327;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    .dashicons {
+        color: #646970;
+    }
+}
+
+.iawmlf-log-count {
+    font-weight: 400;
+    color: #646970;
+}
+
+.iawmlf-logs-toggle {
+    font-size: 12px;
+    color: #2271b1;
+}
+
+.iawmlf-log-entries {
+    max-height: 200px;
+    overflow-y: auto;
+    background: #1d2327;
+    color: #f0f0f1;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.iawmlf-log-entry {
+    padding: 6px 16px;
+    border-bottom: 1px solid #333;
+    &:last-child {
+        border-bottom: none;
+    }
+}
+
+.iawmlf-log-truncated {
+    padding: 10px 16px;
+    text-align: center;
+    color: #757575;
+    font-style: italic;
+    background: #2c2c2c;
+}
+
+// Clone footer
+.iawmlf-clone-footer {
+    padding: 16px;
+    background: #f8f9fa;
+    border-top: 1px solid #f0f0f1;
+    text-align: center;
+
+    .button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0 6px;
+        .dashicons {
+            font-size: 16px;
+            width: 16px;
+            height: 16px;
+        }
+    }
+}
+
+.iawmlf-clone-running-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: #856404;
+    font-size: 13px;
+    font-weight: 500;
+    .dashicons {
+        color: #dba617;
+    }
+}
+
+.iawmlf-clone-refresh-countdown {
+    display: inline-block;
+    margin-left: 16px;
+    padding: 4px 10px;
+    background: #f0f6fc;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #50575e;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+
+    &:hover {
+        background: #e5f0fb;
+        border-color: #2271b1;
+    }
+
+    &:focus {
+        outline: 2px solid #2271b1;
+        outline-offset: 1px;
+    }
+
+    #iawmlf-clone-countdown {
+        font-weight: 600;
+        color: #2271b1;
+        min-width: 20px;
+        display: inline-block;
+        text-align: center;
+    }
+}
+
+.iawmlf-clone-notice {
+    margin: 8px 0 0 0;
+    font-size: 12px;
+    color: #646970;
+    font-style: italic;
+}
+
+.iawmlf-spin {
+    animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+// Progress states
+.iawmlf-progress-message-running {
+    .iawmlf-progress-fill {
+        background: linear-gradient(90deg, #dba617, #ffb900);
+        animation: progressPulse 1.5s ease-in-out infinite;
+    }
+}
+
+.iawmlf-progress-message-completed {
+    .iawmlf-progress-fill {
+        background: linear-gradient(90deg, #46b450, #1e7e34);
+    }
+}
+
+.iawmlf-progress-message-error {
+    .iawmlf-progress-fill {
+        background: linear-gradient(90deg, #d63638, #a02729);
+    }
+}
+
+@keyframes progressPulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+// Clone Configuration Panel
+.iawmlf-clone-config {
+    margin-top: 16px;
+    padding: 16px;
+    background: #f6f7f7;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+
+    label {
+        display: block;
+        margin-bottom: 8px;
     }
 }

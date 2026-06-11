@@ -14,6 +14,7 @@ use Internet_Archive\Wayback_Machine_Link_Fixer\Settings\Settings;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Report\Report_Table;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Link\Link_Repository;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Dashboard_Page;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Multisite;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -57,7 +58,7 @@ class Report_Page {
 	 */
 	public static function get_page_url(): string {
 		// Use network admin URL if we're in network admin context.
-		if ( is_network_admin() ) {
+		if ( Multisite::is_network() ) {
 			return network_admin_url( 'admin.php?page=' . self::SLUG );
 		}
 
@@ -75,7 +76,7 @@ class Report_Page {
 
 		add_action( 'admin_menu', array( $this, 'register_page' ) );
 
-		if ( is_multisite() ) {
+		if ( Multisite::is_network_active() ) {
 			add_action( 'network_admin_menu', array( $this, 'register_network_page' ) );
 		}
 
@@ -397,7 +398,7 @@ class Report_Page {
 		// Build posts data structure based on context.
 		$posts_data = array();
 
-		if ( is_network_admin() && is_multisite() ) {
+		if ( Multisite::is_network() ) {
 			// NETWORK ADMIN: Get posts from all sites.
 			$sites = get_sites( array( 'number' => 1000 ) ); // Adjust limit if needed.
 
@@ -498,7 +499,7 @@ class Report_Page {
 				'iawmlf_link'       => $link,
 				'iawmlf_posts'      => $posts_data, // Now structured by site.
 				'iawmlf_back_url'   => wp_get_referer() ?: self::get_page_url(), // phpcs:ignore Universal.Operators.DisallowShortTernary.Found, returns false, so cant use ??
-				'iawmlf_is_network' => is_network_admin() && is_multisite(),
+				'iawmlf_is_network' => Multisite::is_network(),
 			)
 		);
 	}

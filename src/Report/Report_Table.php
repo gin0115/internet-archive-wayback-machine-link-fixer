@@ -301,8 +301,9 @@ class Report_Table extends \WP_List_Table {
 			$redirect = add_query_arg( 'iawmlf_filtered_post_id', absint( $params['iawmlf_filtered_post_id'] ), $redirect );
 		}
 
-		// Add to the redirect the current page.
-		$url = home_url() . $redirect;
+		// Build the full redirect URL — $redirect already contains the full path from REQUEST_URI.
+		$parsed = wp_parse_url( home_url() );
+		$url    = $parsed['scheme'] . '://' . $parsed['host'] . $redirect;
 
 		// Redirect to the page using JS as page already loaded headers.
 		printf( '<script>window.location = %s;</script>', wp_json_encode( $url ) );
