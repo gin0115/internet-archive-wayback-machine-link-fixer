@@ -32,6 +32,7 @@ class Settings {
 	public const MIGRATIONS_KEY                 = self::SETTINGS_PREFIX . 'migration_log';
 	public const DROP_TABLES_ON_UNINSTALL_KEY   = self::SETTINGS_PREFIX . 'drop_tables_uninstall';
 	public const LINK_EXCLUSIONS                = self::SETTINGS_PREFIX . 'link_exclusions';
+	public const LINK_FIXER_EXCLUDED_POSTS      = self::SETTINGS_PREFIX . 'link_fixer_excluded_posts';
 	public const SCAN_EXISTING_POSTS            = self::SETTINGS_PREFIX . 'scan_existing_posts';
 	public const ARCHIVE_ORG_SECRET_KEY         = self::SETTINGS_PREFIX . 'archive_api_secret';
 	public const ARCHIVE_ORG_ACCESS_KEY         = self::SETTINGS_PREFIX . 'archive_api_access';
@@ -44,6 +45,7 @@ class Settings {
 	public const SETUP_WIZARD_STEP_KEY          = self::SETTINGS_PREFIX . 'setup_wizard';
 	public const SETUP_WIZARD_COMPLETED_KEY     = self::SETTINGS_PREFIX . 'setup_wizard_completed';
 	public const ONBOARDING_DATE_KEY            = self::SETTINGS_PREFIX . 'onboarding_date';
+	public const CAST_ARCHIVED_TO_HTTPS         = self::SETTINGS_PREFIX . 'cast_to_https';
 
 	// Table names.
 	public const LINK_TABLE = 'iawmlf_link_archive';
@@ -66,6 +68,11 @@ class Settings {
 	public const ALLOWED_OWN_CONTENT_POST_TYPES            = self::SETTINGS_PREFIX . 'allowed_own_content_post_types';
 	public const ROUTINELY_UPDATE_WAYBACK_MACHINE          = self::SETTINGS_PREFIX . 'routinely_update_wayback_machine';
 	public const ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL = self::SETTINGS_PREFIX . 'routinely_update_wayback_machine_interval';
+	public const AUTO_ARCHIVER_EXCLUDED_POSTS              = self::SETTINGS_PREFIX . 'auto_archiver_excluded_posts';
+
+	// Link icon.
+	public const LINK_ICON      = self::SETTINGS_PREFIX . 'link_icon';
+	public const LINK_ICON_NONE = 'none';
 
 	// Multisite options.
 	public const MULTISITE_LINKS_TABLE_MODE = self::SETTINGS_PREFIX . 'multisite_links_table_mode';
@@ -213,6 +220,32 @@ class Settings {
 	public static function get_link_exclusions(): array {
 		$links = array_map( 'esc_html', (array) self::get_multisite_aware_option( self::LINK_EXCLUSIONS, array() ) );
 		return apply_filters( 'iawmlf_link_exclusions', $links );
+	}
+
+	/**
+	 * Get the array of excluded post IDs for the link fixer.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @return int[]
+	 */
+	public static function get_link_fixer_excluded_posts(): array {
+		$post_ids = array_map( 'absint', (array) get_option( self::LINK_FIXER_EXCLUDED_POSTS, array() ) );
+		$post_ids = (array) apply_filters( 'iawmlf_link_fixer_excluded_posts', array_filter( $post_ids ) );
+		return array_filter( array_map( 'absint', $post_ids ) );
+	}
+
+	/**
+	 * Get the array of excluded post IDs for the auto archiver.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @return int[]
+	 */
+	public static function get_auto_archiver_excluded_posts(): array {
+		$post_ids = array_map( 'absint', (array) get_option( self::AUTO_ARCHIVER_EXCLUDED_POSTS, array() ) );
+		$post_ids = (array) apply_filters( 'iawmlf_auto_archiver_excluded_posts', array_filter( $post_ids ) );
+		return array_filter( array_map( 'absint', $post_ids ) );
 	}
 
 	/**
@@ -739,6 +772,147 @@ class Settings {
 	}
 
 	/**
+	 * Checks if archived links should be cast as HTTPS.
+	 *
+	 * @since 1.3.5
+	 *
+	 * @return boolean
+	 */
+	public static function should_cast_archived_to_https(): bool {
+		return (bool) get_option( self::CAST_ARCHIVED_TO_HTTPS, false );
+	}
+
+	/**
+	 * Gets the available link icon options.
+	 *
+	 * Icons are provided via the `iawmlf_link_icons` filter as full entries.
+	 * Each entry must include:
+	 * - id:       (string) Unique identifier.
+	 * - name:     (string) Display name shown in settings.
+	 * - css_rule: (string) Complete CSS rule including selector and braces (empty string for none).
+	 *
+	 * @since 1.4.0
+	 *
+	 * @return array<int, array{id: string, name: string, css_rule: string}>
+	 */
+	public static function get_available_link_icons(): array {
+		$icon_url = esc_url( IAWMLF_URL . 'assets/images/archive-icon.svg' );
+
+		$icons = array(
+			array(
+				'id'       => 'ia_logo_before',
+				'name'     => __( 'Internet Archive Logo (Before Link)', 'internet-archive-wayback-machine-link-fixer' ),
+				'css_rule' => 'a[href*="web.archive.org/web"]:before, a[href*="web-wp.archive.org/web"]:before { content: ""; display: inline-block; position: relative; bottom: -.2rem; margin-right: .25rem; width: 1rem; height: 1rem; background-image: url("' . $icon_url . '"); background-size: 100% 100%; background-position: center; background-repeat: no-repeat; opacity: 0.65; }',
+			),
+			array(
+				'id'       => 'ia_logo_after',
+				'name'     => __( 'Internet Archive Logo (After Link)', 'internet-archive-wayback-machine-link-fixer' ),
+				'css_rule' => 'a[href*="web.archive.org/web"]:after, a[href*="web-wp.archive.org/web"]:after { content: ""; display: inline-block; position: relative; bottom: -.2rem; margin-left: .25rem; width: 1rem; height: 1rem; background-image: url("' . $icon_url . '"); background-size: 100% 100%; background-position: center; background-repeat: no-repeat; opacity: 0.65; }',
+			),
+		);
+
+		/**
+		 * Filters the available link icons.
+		 *
+		 * Allows third-party plugins to add custom icons to the link icon selector.
+		 * Each icon should be an associative array with 'id', 'name', and 'css_rule' keys.
+		 * The 'css_rule' should be a complete CSS rule including selector and braces.
+		 *
+		 * @since 1.4.0
+		 *
+		 * @param array<int, array{id: string, name: string, css_rule: string}> $icons The available icons.
+		 *
+		 * @return array<int, array{id: string, name: string, css_rule: string}>
+		 */
+		$filtered = (array) apply_filters( 'iawmlf_link_icons', $icons );
+
+		// Validate and normalize each icon entry.
+		$validated = array();
+		foreach ( $filtered as $icon ) {
+			if ( ! is_array( $icon ) ) {
+				continue;
+			}
+
+			// Must have a css_rule that is a non-empty string.
+			if ( ! isset( $icon['css_rule'] ) || ! is_string( $icon['css_rule'] ) || '' === $icon['css_rule'] ) {
+				continue;
+			}
+
+			$id   = isset( $icon['id'] ) && is_string( $icon['id'] ) ? sanitize_title( $icon['id'] ) : '';
+			$name = isset( $icon['name'] ) && is_string( $icon['name'] ) ? sanitize_text_field( $icon['name'] ) : '';
+
+			// Fall back id to name or name to id.
+			if ( '' === $id && '' !== $name ) {
+				$id = sanitize_title( $name );
+			} elseif ( '' === $name && '' !== $id ) {
+				$name = $id;
+			}
+
+			// If we still have no id, skip.
+			if ( '' === $id ) {
+				continue;
+			}
+
+			$validated[ $id ] = array(
+				'id'       => $id,
+				'name'     => $name,
+				'css_rule' => $icon['css_rule'],
+			);
+		}
+
+		// Always append "None" so it cannot be removed by the filter.
+		$validated[ self::LINK_ICON_NONE ] = array(
+			'id'       => self::LINK_ICON_NONE,
+			'name'     => __( 'None', 'internet-archive-wayback-machine-link-fixer' ),
+			'css_rule' => '',
+		);
+
+		return array_values( $validated );
+	}
+
+	/**
+	 * Gets the selected link icon ID.
+	 *
+	 * Returns the ID of the currently selected link icon.
+	 * Defaults to 'none' if not set or if the stored value is not a valid icon ID.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @return string
+	 */
+	public static function get_link_icon(): string {
+		$icon_id   = sanitize_text_field( (string) get_option( self::LINK_ICON, self::LINK_ICON_NONE ) );
+		$valid_ids = array_column( self::get_available_link_icons(), 'id' );
+
+		// If the stored value is not a valid icon ID, revert to none.
+		if ( ! in_array( $icon_id, $valid_ids, true ) ) {
+			return self::LINK_ICON_NONE;
+		}
+
+		return $icon_id;
+	}
+
+	/**
+	 * Gets the CSS rule for the currently selected link icon.
+	 *
+	 * @since 1.4.0
+	 *
+	 * @return string The CSS rule, or empty string if no icon selected.
+	 */
+	public static function get_link_icon_css(): string {
+		$icon_id = self::get_link_icon();
+		$icons   = self::get_available_link_icons();
+
+		foreach ( $icons as $icon ) {
+			if ( $icon['id'] === $icon_id ) {
+				return $icon['css_rule'];
+			}
+		}
+
+		return '';
+	}
+
+	/**
 	 * Clear all the options.
 	 *
 	 * @since 1.3.0
@@ -752,6 +926,7 @@ class Settings {
 		delete_option( self::MIGRATIONS_KEY );
 		delete_option( self::DROP_TABLES_ON_UNINSTALL_KEY );
 		delete_option( self::LINK_EXCLUSIONS );
+		delete_option( self::LINK_FIXER_EXCLUDED_POSTS );
 		delete_option( self::SCAN_EXISTING_POSTS );
 		delete_option( self::ARCHIVE_ORG_SECRET_KEY );
 		delete_option( self::ARCHIVE_ORG_ACCESS_KEY );
@@ -762,10 +937,14 @@ class Settings {
 		delete_option( self::ALLOWED_OWN_CONTENT_POST_TYPES );
 		delete_option( self::ROUTINELY_UPDATE_WAYBACK_MACHINE );
 		delete_option( self::ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL );
+		delete_option( self::AUTO_ARCHIVER_EXCLUDED_POSTS );
 		delete_option( self::POST_ACTIVATION_ONBOARDING_KEY );
 		delete_option( self::MINIMUM_CHECKS_BEFORE_BROKEN );
 		delete_option( self::LINK_CHECK_DURATION_IN_DAYS );
 		delete_option( self::SETUP_WIZARD_STEP_KEY );
 		delete_option( self::SETUP_WIZARD_COMPLETED_KEY );
+		delete_option( self::ONBOARDING_DATE_KEY );
+		delete_option( self::CAST_ARCHIVED_TO_HTTPS );
+		delete_option( self::LINK_ICON );
 	}
 }

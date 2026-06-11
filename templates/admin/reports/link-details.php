@@ -47,9 +47,9 @@ $iawmlf_link_title = iawmlf_trim_string( str_replace( array( 'http://', 'https:/
 									if ( ! $iawmlf_link->is_processed() ) {
 										$iawmlf_archive_process = $iawmlf_link->get_archive_process();
 										if ( Link::PROCESS_NEW === $iawmlf_archive_process ) {
-											esc_html_e( 'NEW - This link has been queued and will be processed by the Internet Archive as soon as possible', 'internet-archive-wayback-machine-link-fixer' );
+											esc_html_e( 'NEW - This link has been queued and will be processed by the Internet Archive as soon as possible.', 'internet-archive-wayback-machine-link-fixer' );
 										} else {
-											esc_html_e( 'PENDING – Queued for submission to the Internet Archive. Processing time varies based on queue size.', 'internet-archive-wayback-machine-link-fixer' );
+											esc_html_e( 'PENDING - Queued for submission to the Internet Archive. Processing time varies based on queue size.', 'internet-archive-wayback-machine-link-fixer' );
 										}
 									} elseif ( '' !== $iawmlf_link->get_archived_href() ) {
 										printf(
@@ -58,7 +58,7 @@ $iawmlf_link_title = iawmlf_trim_string( str_replace( array( 'http://', 'https:/
 											'<a href="' . esc_url( $iawmlf_link->get_archived_href() ) . '" target="_blank">' . esc_html__( 'View Snapshot', 'internet-archive-wayback-machine-link-fixer' ) . '</a>'
 										);
 									} else {
-										esc_html_e( 'NO ARCHIVE - Unable to create or find a snapshot. This can happen if the URL is blocked by robots.txt, requires authentication, or is no longer accessible', 'internet-archive-wayback-machine-link-fixer' );
+										esc_html_e( 'NO ARCHIVE - Unable to create or find a snapshot. This can happen if the URL is blocked by robots.txt, requires authentication, or is no longer accessible.', 'internet-archive-wayback-machine-link-fixer' );
 									}
 									?>
 								</p>
@@ -73,7 +73,7 @@ $iawmlf_link_title = iawmlf_trim_string( str_replace( array( 'http://', 'https:/
 							<?php endif; ?>
 
 							<?php if ( '' !== $iawmlf_link->get_message() ) : ?>
-								<p class="iawmlf_link_message"><strong><?php esc_html_e( 'Message', 'internet-archive-wayback-machine-link-fixer' ); ?></strong>: <?php echo esc_html( $iawmlf_link->get_message() ); ?></p>
+								<p class="iawmlf_link_message"><strong><?php esc_html_e( 'Message', 'internet-archive-wayback-machine-link-fixer' ); ?></strong>:   <?php echo wp_kses_post( ( new Internet_Archive\Wayback_Machine_Link_Fixer\Util\Link_Summary_Factory( $iawmlf_link ) )->get_current_message() ) ;// phpcs:ignore?></p>
 							<?php endif; ?>
 
 							<?php if ( $iawmlf_link->is_excluded() ) : ?>
@@ -82,6 +82,30 @@ $iawmlf_link_title = iawmlf_trim_string( str_replace( array( 'http://', 'https:/
 						</div>
 					</div>
 
+					<?php do_action( 'iawmlf_link_details_after_link_info', $iawmlf_link ); ?>
+
+					<div id="iawmlf_link_exclusion" class="postbox ">
+						<div class="postbox-header">
+							<h2 class="handle ui-sortable-handle"><?php esc_html_e( 'Link Exclusion', 'internet-archive-wayback-machine-link-fixer' ); ?></h2>
+						</div>
+						<div class="inside">
+							<?php if ( $iawmlf_link->is_excluded() ) : ?>
+								<p><?php esc_html_e( 'This link is currently excluded. It will not be checked for broken status, fixed automatically, or have snapshots created by the Internet Archive.', 'internet-archive-wayback-machine-link-fixer' ); ?></p>
+							<?php else : ?>
+								<p><?php esc_html_e( 'Excluding this link will stop it from being checked for broken status, fixed automatically, or having snapshots created by the Internet Archive.', 'internet-archive-wayback-machine-link-fixer' ); ?></p>
+							<?php endif; ?>
+
+							<form method="post" id="iawmlf_link_details_form">
+								<?php wp_nonce_field( 'iawmlf_link_details', 'iawmlf_link_details_nonce' ); ?>
+								<input type="hidden" name="iawmlf_link_id" value="<?php echo absint( $iawmlf_link->get_id() ); ?>" />
+
+								<label>
+									<input type="checkbox" name="iawmlf_exclude_link" value="1" id="iawmlf_toggle_exclusion" <?php checked( $iawmlf_link->is_excluded() ); ?> />
+									<?php esc_html_e( 'Exclude this link', 'internet-archive-wayback-machine-link-fixer' ); ?>
+								</label>
+							</form>
+						</div>
+					</div>
 
 					<div id="iawmlf_link_checks" class="postbox ">
 						<div class="postbox-header">
@@ -123,8 +147,8 @@ $iawmlf_link_title = iawmlf_trim_string( str_replace( array( 'http://', 'https:/
 									<?php endif; ?>
 
 									<?php foreach ( array_reverse( $iawmlf_link->get_checks() ) as $iawmlf_index => $iawmlf_check ) : ?>
-										<?php // Hide the first n posts to the value of $iawmlf_hide_check_count. ?>
-										<?php if ( $iawmlf_index < $iawmlf_hide_check_count ) : ?>
+										<?php // Hide the oldest checks (beyond the newest 10). ?>
+										<?php if ( $iawmlf_index >= ( $iawmlf_check_count - $iawmlf_hide_check_count ) ) : ?>
 											<tr class="iawmlf_hidden_check" style="display: none;">
 										<?php else : ?>
 											<tr>
@@ -238,6 +262,11 @@ $iawmlf_link_title = iawmlf_trim_string( str_replace( array( 'http://', 'https:/
 							<?php endforeach; ?>
 						<?php endif; ?>
 					</div>
+					<p class="iawmlf-submit-wrapper">
+						<button type="submit" form="iawmlf_link_details_form" class="button button-primary">
+							<?php esc_html_e( 'Save Changes', 'internet-archive-wayback-machine-link-fixer' ); ?>
+						</button>
+					</p>
 				</div>
 				</div>
 			</div>

@@ -75,19 +75,98 @@ class Test_Process_Local_Post_Event extends TestCase {
 	 * @return void
 	 */
 	public function test_add_local_post_to_queue_multiple_times(): void {
-		$post_id = 1;
+		$post_id = 999;
 
 		// Create the event.
 		$event = new Process_Local_Post_Event();
 
-		$event::add_to_queue( $post_id );
-		$event::add_to_queue( $post_id );
-		$event::add_to_queue( $post_id );
-		$event::add_to_queue( $post_id );
-		$event::add_to_queue( $post_id );
+		Process_Local_Post_Event::add_to_queue( $post_id );
+		Process_Local_Post_Event::add_to_queue( $post_id );
+		Process_Local_Post_Event::add_to_queue( $post_id );
+		Process_Local_Post_Event::add_to_queue( $post_id );
+		Process_Local_Post_Event::add_to_queue( $post_id );
 
 		// Check that the action has been added to the queue.
-		$actions = $this->wpdb->get_results( "SELECT * FROM {$this->wpdb->prefix}actionscheduler_actions where status='pending'" );
+		$actions = $this->wpdb->get_results( "SELECT * FROM {$this->wpdb->prefix}actionscheduler_actions" );
+
+		$pending = array_filter(
+			$actions,
+			function ( $action ) use ( $post_id ) {
+				return $action->status === 'pending' && $action->hook === Process_Local_Post_Event::HANDLE && $action->args === json_encode( array( 'post_id' => $post_id ) );
+			}
+		);
+
+		$cancelled = array_filter(
+			$actions,
+			function ( $action ) use ( $post_id ) {
+				return $action->status === 'canceled' && $action->hook === Process_Local_Post_Event::HANDLE && $action->args === json_encode( array( 'post_id' => $post_id ) );
+			}
+		);
+
+		$this->assertCount( 1, $pending );
+		$this->assertCount( 4, $cancelled );
+
+		// Check to ensure the hard delete handler is removed, to prevent interference with other events.
+		$this->assertFalse( has_action( 'action_scheduler_canceled_action', array( Process_Local_Post_Event::class, 'handle_hard_delete' ) ) );
+	}
+
+	/**
+	 * @testdox If there are many pending rows for the same post, scheduling should collapse them to one.
+	 *
+	 * @see https://github.com/a8cteam51/internet-archive-wayback-machine-link-fixer/issues/294
+	 * @return void
+	 */
+	public function test_add_local_post_to_queue_with_existing_duplicates(): void {
+		$post_id = 42;
+
+		// Insert 10 duplicate pending scheduled actions for the same post to
+		// simulate the DB flood described in the issue.
+		$table = $this->wpdb->prefix . 'actionscheduler_actions';
+		$now   = time();
+		for ( $i = 0; $i < 10; $i++ ) {
+			$ts = $now + $i;
+
+			$schedule = \str_replace(
+				'11111111',
+				"$ts",
+				'"O:30:"ActionScheduler_SimpleSchedule":2:{s:22:"\x00*\x00scheduled_timestamp";i:11111111;s:41:"\x00ActionScheduler_SimpleSchedule\x00timestamp";i:11111111;}"',
+			);
+
+			$this->wpdb->insert(
+				$table,
+				array(
+					'action_id'            => time() + $i,
+					'hook'                 => Process_Local_Post_Event::HANDLE,
+					'status'               => 'pending',
+					'scheduled_date_gmt'   => gmdate( 'Y-m-d H:i:s', $ts ),
+					'scheduled_date_local' => gmdate( 'Y-m-d H:i:s', $ts ),
+					'priority'             => 10,
+					'args'                 => wp_json_encode( array( 'post_id' => $post_id ) ),
+					'schedule'             => $schedule,
+					'group_id'             => 3,
+					'attempts'             => 0,
+					'last_attempt_gmt'     => '0000-00-00 00:00:00',
+					'last_attempt_local'   => '0000-00-00 00:00:00',
+					'claim_id'             => 0,
+					'extended_args'        => null,
+				),
+				array( '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%s', '%s', '%d', '%s', '%s', '%s' ),
+			);
+		}
+
+		// Call the method which should remove duplicates and add a single
+		// scheduled action.
+		Process_Local_Post_Event::add_to_queue_with_delay( $post_id, 0 );
+
+		// Check there is only one pending action for that post.
+		$actions = $this->wpdb->get_results(
+			$this->wpdb->prepare(
+				"SELECT * FROM {$table} WHERE status = 'pending' AND hook = %s AND args = %s",
+				Process_Local_Post_Event::HANDLE,
+				wp_json_encode( array( 'post_id' => $post_id ) )
+			)
+		);
+
 		$this->assertCount( 1, $actions );
 	}
 

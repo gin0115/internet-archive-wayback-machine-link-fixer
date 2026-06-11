@@ -215,7 +215,7 @@ class Check_Snapshot_Status_Event {
 		// If status is error, throw exception with error code.
 		if ( 'error' === $status['status'] ) {
 			// Update the link with the error message.
-			$link = $link->set_message( esc_html( $status['message'] ) );
+			$link = $link->set_message( esc_html( $status['status_ext'] ) );
 
 			// If the status has a 'status_ext' key, set the link as excluded.
 			if ( isset( $status['status_ext'] ) && 'error:no-access' === $status['status_ext'] ) {
@@ -246,9 +246,15 @@ class Check_Snapshot_Status_Event {
 		if ( 'success' === $status['status'] ) {
 			$this->mark_as_pending( $link_id );
 
-			// If the link is excluded, but now is success, set the link as not excluded.
-			if ( $link->is_excluded() && 'success' === $status['status'] ) {
+			// If a system-set exclusion, lift it and clear the stale message.
+			if ( $link->is_excluded() && ! $link->is_manual_exclusion() ) {
 				$link = $link->set_excluded( false );
+
+				// If the link has an error message, clear it.
+				if ( '' !== $link->get_message() ) {
+					$link = $link->set_message( '' );
+				}
+
 				$this->link_repository->upsert( $link );
 			}
 

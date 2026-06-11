@@ -3,14 +3,16 @@
 **Contributors:** wpcomspecialprojects  
 **Tags:** wayback machine, internet archive, broken links, archive links  
 **Requires at least:** 6.4  
-**Tested up to:** 6.8  
+**Tested up to:** 6.9  
 **Requires PHP:** 7.4  
-**Stable tag:** 1.3.4 
+**Stable tag:** 1.4.2
 **License:** GPL-3.0-or-later  
 **License URI:** https://www.gnu.org/licenses/gpl-3.0.html
 
-[![Unit Tests](https://github.com/a8cteam51/wayback-link-fixer/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/a8cteam51/wayback-link-fixer/actions/workflows/unit-tests.yml)
-
+[![PHP Coding Standards](https://github.com/a8cteam51/internet-archive-wayback-machine-link-fixer/actions/workflows/php-coding-standards.yml/badge.svg)](https://github.com/a8cteam51/internet-archive-wayback-machine-link-fixer/actions/workflows/php-coding-standards.yml)
+[![PHP Syntax Errors](https://github.com/a8cteam51/internet-archive-wayback-machine-link-fixer/actions/workflows/php-syntax-errors.yml/badge.svg)](https://github.com/a8cteam51/internet-archive-wayback-machine-link-fixer/actions/workflows/php-syntax-errors.yml)
+[![WP PHPUnit Tests](https://github.com/a8cteam51/internet-archive-wayback-machine-link-fixer/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/a8cteam51/internet-archive-wayback-machine-link-fixer/actions/workflows/unit-tests.yml)
+[![E2E Tests](https://github.com/a8cteam51/internet-archive-wayback-machine-link-fixer/actions/workflows/e2e-tests.yml/badge.svg)](https://github.com/a8cteam51/internet-archive-wayback-machine-link-fixer/actions/workflows/e2e-tests.yml)
 
 ## Description
 
@@ -100,6 +102,12 @@ Specify links to exclude from being checked. This is useful for links known to b
 * `https://example.com/*` - Excludes all links starting with `https://example.com/`
 * `https://x.com*` - Excludes all links containing `x/twitter` in the domain name
 
+#### Post Exclusions
+
+![Post Exclusions](./_docs/settings--fixer-post-exclusions.png)
+
+Search for specific posts to exclude from link checking. Outbound links within excluded posts will not be scanned, checked, or replaced on the frontend. Excluded posts are also skipped during batch scanning of existing content. In the post list table, excluded posts display an "Excluded post" label in the Links column. Posts can also be excluded programmatically using the `iawmlf_link_fixer_excluded_posts` filter.
+
 #### Check Frequency
 
 ![Check Frequency](./_docs/settings--check-frequency.png)
@@ -121,6 +129,21 @@ You can choose what outcome you want to happen when a link is found to be broken
  * **Do Nothing** - This will not change the link at all, but useful for monitoring content.
  * **Replace Link (No Notification)** - This will replace the broken link with the archived version, if one exists. If no archived version exists, the link will not be changed. No notice will be given to the user that the link has been replaced.
 
+#### Link Icon
+
+![Link Icon](./_docs/settings--link-icon.png)
+
+When the Fixer Option is set to **Replace Link**, you can optionally display a small icon next to fixed links on the frontend. This lets visitors know the link points to an archived version.
+
+The available options are:
+ * **None** - No icon is displayed (default).
+ * **Internet Archive Logo (Before Link)** - Displays the Internet Archive icon before the link text.
+ * **Internet Archive Logo (After Link)** - Displays the Internet Archive icon after the link text.
+
+A live preview is shown next to the selector so you can see how the icon will look.
+
+Third-party plugins can add custom icons using the `iawmlf_link_icons` filter. See the [Developer Documentation](#iawmlf_link_icons) for details.
+
 ### Auto Archiver
 
 ![Auto Archiver](./_docs/settings--auto-archiver.png)
@@ -138,6 +161,12 @@ Enable this option to routinely update your posts in the Wayback Machine. This e
 ![Allowed Post Types](./_docs/settings--allowed-auto-archive-post-types.png)
 
 Select which post types should be automatically archived when they are created or updated. Only the selected types will trigger the Auto Archiver on save.
+
+#### Post Exclusions
+
+![Auto Archive Post Exclusions](./_docs/settings--auto-archive-post-exclusions.png)
+
+Search for specific posts to exclude from auto archiving. Excluded posts will not be submitted to the Wayback Machine when created or updated. Posts can also be excluded programmatically using the `iawmlf_auto_archiver_excluded_posts` filter.
 
 
 ## Dashboard Widget
@@ -545,6 +574,22 @@ The API status check result is cached for 1 hour by default.
 
 ---
 
+#### Failed Event Garbage Collection Event
+
+This event runs daily at midnight to clean up old failed Action Scheduler events, preventing them from accumulating over time. It removes duplicate failed retry attempts for snapshot, archive URL, and validator events older than a configurable threshold, keeping only the most recent attempt for each unique event.
+
+**Action:** `iawmlf_failed_event_garbage_collection`
+
+*This event takes no arguments.*
+
+**Filters:**
+
+| **Configuration** | **Filter** | **Default** | **Description** |
+|-------------------|------------|-------------|-----------------|
+| Days threshold | [`iawmlf_failed_event_gc_days_threshold`](#iawmlf_failed_event_gc_days_threshold) | 7 days | How old failed events must be before cleanup |
+
+---
+
 ### Hooks
 
 The plugin is designed to be extensible, with a number of hooks and filters available for developers to use.
@@ -606,6 +651,30 @@ This filter enhances the link exclusions defined in admin settings by adding add
 add_filter( 'iawmlf_link_exclusions', function( array $exclusions ): array {
    $exclusions[] = 'https://example.com/*';
    return $exclusions;
+});
+```
+
+#### `iawmlf_link_fixer_excluded_posts`
+
+This filter allows you to programmatically add post IDs to the link fixer exclusion list. Excluded posts will not have their links scanned or archived.
+
+```php
+add_filter( 'iawmlf_link_fixer_excluded_posts', function( array $post_ids ): array {
+   $post_ids[] = 123;
+   $post_ids[] = 456;
+   return $post_ids;
+});
+```
+
+#### `iawmlf_auto_archiver_excluded_posts`
+
+This filter allows you to programmatically add post IDs to the auto archiver exclusion list. Excluded posts will not be submitted to the Wayback Machine when created or updated.
+
+```php
+add_filter( 'iawmlf_auto_archiver_excluded_posts', function( array $post_ids ): array {
+   $post_ids[] = 123;
+   $post_ids[] = 456;
+   return $post_ids;
 });
 ```
 
@@ -687,6 +756,31 @@ add_filter( 'iawmlf_valid_http_status_codes', function( array $codes ): array {
    $codes[] = 301;
    return $codes;
 });
+```
+
+#### `iawmlf_human_readable_status_message`
+
+This filter allows you to customize the human-readable message for a given Wayback Machine status code.
+
+```php
+add_filter( 'iawmlf_human_readable_status_message', function( string $message, string $status_code ): string {
+   if ( 'error:not-found' === $status_code ) {
+      return 'Custom 404 message.';
+   }
+   return $message;
+}, 10, 2 );
+```
+
+#### `iawmlf_excluded_status_codes`
+
+This filter controls the allowlist of Wayback Machine error codes that **do not** exclude a link. Any error code not in this list will be treated as excluded.
+
+```php
+add_filter( 'iawmlf_excluded_status_codes', function( array $allowed_codes ): array {
+   $allowed_codes[] = 'error:browsing-timeout';
+   return $allowed_codes;
+});
+```
 ```
 
 #### `iawmlf_failed_count`
@@ -787,6 +881,16 @@ add_filter( 'iawmlf_scan_own_posts_per_call', function( int $posts_per_call ): i
 });
 ```
 
+#### `iawmlf_failed_event_gc_days_threshold`
+
+This filter controls how many days old a failed Action Scheduler event must be before the garbage collection process will clean it up. The default is 7 days.
+
+```php
+add_filter( 'iawmlf_failed_event_gc_days_threshold', function( int $days ): int {
+	return 14; // Keep failed events for 14 days before cleanup
+});
+```
+
 #### `iawmlf_show_link_table_debug_data`
 
 This is used to show additional debug data in the link table. This is for debugging purposes only. The default is false.
@@ -843,6 +947,21 @@ add_filter( 'iawmlf_menu_icon_base64', function( string $icon ): string {
 
 These filters allow advanced customization of URLs, timeouts, and client implementations.
 
+#### `iawmlf_link_icons`
+
+This filter allows you to add custom icons to the link icon selector in settings. The Link Icon setting is only available when the Fixer Option is set to **Replace Link**. Each icon should be an array with `id`, `name`, and `css_rule` keys. The `css_rule` should be a complete CSS rule including selector and braces.
+
+```php
+add_filter( 'iawmlf_link_icons', function( array $icons ): array {
+   $icons[] = array(
+      'id'       => 'custom_checkmark',
+      'name'     => 'Checkmark',
+      'css_rule' => 'a[href*="web.archive.org/web"]:after, a[href*="web-wp.archive.org/web"]:after { content: "\2713"; font-size: 0.8em; opacity: 0.7; }',
+   );
+   return $icons;
+} );
+```
+
 #### `iawmlf_is_valid_check`
 
 This filter is used when a url is checked and we are returning if the link is valid or not. The default is to check if the status code is in the `iawmlf_valid_http_status_codes` array.
@@ -876,15 +995,15 @@ add_filter( 'iawmlf_exclude_link_from_post', function( bool $exclude, Link $link
 
 #### `iawmlf_own_content_allow_post`
 
-This filter allows a final decision to be made on if a post should be added to the Wayback Machine. The default is to allow all posts.
+This filter allows a final decision to be made on if a post should be added to the Wayback Machine. The default value reflects the auto archiver exclusion list — posts in the exclusion list default to `false`, all others default to `true`.
 
 ```php
-add_filter( 'iawmlf_own_content_allow_post', function( bool $allow, int $post_id ): bool {
-	if ( get_post_meta( $post_id, 'do_not_archive', true ) ) {
+add_filter( 'iawmlf_own_content_allow_post', function( bool $allow, \WP_Post $post ): bool {
+	if ( get_post_meta( $post->ID, 'do_not_archive', true ) ) {
 		return false;
 	}
 	return $allow;
-});
+}, 10, 2 );
 ```
 
 #### `iawmlf_link_checker_url_params`
@@ -998,6 +1117,47 @@ This filter allows you to change the required capability for accessing the repor
 add_filter( 'iawmlf_reporting_page_capability', function( string $capability ): string {
 	return 'edit_posts'; // Allow editors to access the reporting page
 });
+```
+
+#### Action Hooks
+
+#### `iawmlf_link_details_after_link_info`
+
+This action allows developers to extend the link details admin page by adding additional HTML after the link information section.
+
+```php
+add_action( 'iawmlf_link_details_after_link_info', function( Link $link ): void {
+   printf( '<p>Custom info: %s</p>', esc_html( $link->get_href() ) );
+});
+```
+
+> The `$link` parameter is an instance of `Internet_Archive\Wayback_Machine_Link_Fixer\Link\Link`.
+
+#### `iawmlf_before_saving_link_details`
+
+This filter runs before the link is persisted to the database when the link details form is submitted. It allows developers to modify the link object or perform custom form handling before the changes are saved.
+
+```php
+add_filter( 'iawmlf_before_saving_link_details', function( Link $link ): Link {
+   // Perform custom modifications before the link is saved.
+   return $link;
+});
+```
+
+> This filter runs **before** the link is persisted. Any changes made to the `$link` object here will be included in the save.
+
+#### `iawmlf_link_details_updated_redirect_param`
+
+This filter controls the "updated" flag used in the redirect after saving link details. Returning a falsy value will suppress the default success notice on the link details page.
+
+```php
+add_filter( 'iawmlf_link_details_updated_redirect_param', function( string $updated, Link $link ): string {
+   // Suppress the success notice for a specific link.
+   if ( strpos( $link->get_href(), 'example.com' ) !== false ) {
+      return '';
+   }
+   return $updated;
+}, 10, 2 );
 ```
 
 ### Internet Archive / Wayback Link Fixer Instances.

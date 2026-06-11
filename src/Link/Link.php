@@ -215,6 +215,17 @@ class Link implements \JsonSerializable {
 	}
 
 	/**
+	 * Checks if the link was manually excluded by a user.
+	 *
+	 * @return boolean
+	 */
+	public function is_manual_exclusion(): bool {
+		// Matches the message written by Report_Page::handle_link_details_form() on manual exclude.
+		return $this->is_excluded
+			&& 0 === strpos( $this->message, 'User Requested To Exclude' );
+	}
+
+	/**
 	 * Gets the message for the link.
 	 *
 	 * @return string
@@ -276,6 +287,12 @@ class Link implements \JsonSerializable {
 		}
 		if ( 0 === strpos( $archived_href, 'http://web.archive.org/web/' ) ) {
 			$archived_href = str_replace( 'http://web.archive.org/web/', 'http://web-wp.archive.org/web/', $archived_href );
+		}
+
+		// If the setting to cast to https is enabled, cast the start of the url to https.
+		if ( Settings::should_cast_archived_to_https() ) {
+			// Replace http with https at the start of the url.
+			$archived_href = preg_replace( '#^http://web-wp\.archive\.org/#i', 'https://web-wp.archive.org/', $archived_href );
 		}
 
 		return $archived_href;
@@ -486,7 +503,7 @@ class Link implements \JsonSerializable {
 		return array(
 			'id'            => $this->id,
 			'href'          => $this->href,
-			'archived_href' => $this->archived_href,
+			'archived_href' => $this->get_archived_href(),
 			'redirect_href' => $this->redirect_href,
 			'checks'        => $this->checks,
 			'broken'        => $this->is_broken,

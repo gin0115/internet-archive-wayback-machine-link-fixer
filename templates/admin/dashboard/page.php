@@ -30,7 +30,7 @@ defined( 'ABSPATH' ) || exit;
 
 
 // Extract link statistics
-$iawmlf_total_links_count     = $iawmlf_link_stats['total_links'] ?? 0;
+$iawmlf_total_link_count      = $iawmlf_link_stats['total_links'] ?? 0;
 $iawmlf_all_broken_links      = $iawmlf_link_stats['all_broken_links'] ?? 0;
 $iawmlf_links_with_archive    = $iawmlf_link_stats['links_with_archive'] ?? 0;
 $iawmlf_links_without_archive = $iawmlf_link_stats['links_without_archive'] ?? 0;
@@ -134,7 +134,7 @@ $iawmlf_tooltip_broken_links          = sprintf(
 								<!-- Row 1: Total Links | Being Redirected -->
 								<div class="iawmlf_dashboard-stats-box">
 									<a href="<?php echo esc_url( $iawmlf_link_table ); ?>" class="iawmlf_dashboard-stats-number iawmlf_dashboard-stats-link">
-										<?php echo esc_html( $iawmlf_total_links_count ); ?>
+										<?php echo esc_html( $iawmlf_total_link_count ); ?>
 									</a>
 									<div class="iawmlf_dashboard-stats-label"><?php esc_html_e( 'Total Links', 'internet-archive-wayback-machine-link-fixer' ); ?></div>
 								</div>
@@ -142,7 +142,12 @@ $iawmlf_tooltip_broken_links          = sprintf(
 									<a href="<?php echo esc_url( $iawmlf_filtered_broken_redirected ); ?>" title="<?php echo esc_attr( $iawmlf_tooltip_links_saved ); ?>" class="iawmlf_dashboard-stats-number iawmlf_dashboard-stats-link">
 										<?php echo esc_html( $iawmlf_broken_redirected ); ?>
 									</a>
-									<div class="iawmlf_dashboard-stats-label" title="<?php echo esc_attr( $iawmlf_tooltip_links_saved ); ?>"><?php esc_html_e( 'Links Saved', 'internet-archive-wayback-machine-link-fixer' ); ?></div>
+									<div class="iawmlf_dashboard-stats-label" title="<?php echo esc_attr( $iawmlf_tooltip_links_saved ); ?>">
+										<?php
+										/* translators: "Links Saved" refers to broken links that are now being redirected to their archived versions on archive.org */
+										esc_html_e( 'Links Saved', 'internet-archive-wayback-machine-link-fixer' );
+										?>
+									</div>
 								</div>
 
 								<!-- Row 2: With Archive | Without -->
@@ -178,9 +183,6 @@ $iawmlf_tooltip_broken_links          = sprintf(
 					<?php
 					// Set up variables for the widget (it expects $iawmlf_details, not $iawmlf_account_details)
 					$iawmlf_details = $iawmlf_account_details;
-
-					// Create a total links array for the widget (pass the actual count)
-					$iawmlf_total_links = array_fill( 0, $iawmlf_total_links_count, null ); // Mock array with correct count
 
 					// Include the existing widget template
 					require __DIR__ . '/widget.php';

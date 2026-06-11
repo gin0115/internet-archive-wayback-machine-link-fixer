@@ -15,6 +15,7 @@ namespace Internet_Archive\Wayback_Machine_Link_Fixer\WP_Post;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Link\Link;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Settings\Settings;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Report_Page;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Settings_Page;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Link\Link_Repository;
 
 defined( 'ABSPATH' ) || exit;
@@ -105,7 +106,16 @@ class WP_Post_Table_Controller {
 	 */
 	public function add_column( array $columns ): array {
 		// Get the post type.
-		$post_type = get_current_screen()->post_type;
+		$screen = get_current_screen();
+		if ( $screen ) {
+			$post_type = $screen->post_type;
+		} else {
+			// Fall back to the request's post_type or the post being edited.
+			$post_type = isset( $_REQUEST['post_type'] ) // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				? \sanitize_key( $_REQUEST['post_type'] ) // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				: 'post';
+		}
+
 		// Get the post types from settings.
 		$allowed_post_types = Settings::get_allowed_post_types();
 
@@ -133,6 +143,16 @@ class WP_Post_Table_Controller {
 			return;
 		}
 
+		// If the post is excluded, show a message with a link to settings.
+		if ( in_array( $post_id, Settings::get_link_fixer_excluded_posts(), true ) ) {
+			printf(
+				'<a href="%1$s"><em>%2$s</em></a>',
+				esc_url( Settings_Page::get_page_url() ),
+				esc_html__( 'Excluded post', 'internet-archive-wayback-machine-link-fixer' )
+			);
+			return;
+		}
+
 		// Get the links from the posts meta.
 		$links = get_post_meta( $post_id, Settings::LINK_META_KEY, true );
 
@@ -156,19 +176,17 @@ class WP_Post_Table_Controller {
 			return;
 		}
 
-		print wp_kses(
-			sprintf(
-			// translators: %2$s is the url to view the links in a report, %2$s is the number of broken links, %3$s is the total number of links.
-				__( '<a href="%1$s"><strong>%2$s</strong> broken out of <strong>%3$s</strong></a>', 'internet-archive-wayback-machine-link-fixer' ),
-				$this->generate_report_page_url( $links, $post_id ),
-				absint( $stats['broken'] ),
-				absint( $stats['total'] )
-			),
-			array(
-				'strong' => array(),
-				'a'      => array(
-					'href' => array(),
+		printf(
+			'<a href="%1$s">%2$s</a>',
+			esc_url( $this->generate_report_page_url( $links, $post_id ) ),
+			wp_kses(
+				sprintf(
+					/* translators: 1: number of broken links, 2: total number of links */
+					__( '%1$s broken out of %2$s', 'internet-archive-wayback-machine-link-fixer' ),
+					'<strong>' . esc_html( absint( $stats['broken'] ) ) . '</strong>',
+					'<strong>' . esc_html( absint( $stats['total'] ) ) . '</strong>'
 				),
+				array( 'strong' => array() )
 			)
 		);
 	}

@@ -364,8 +364,15 @@ class Link_Repository {
 		$links = array_filter( $links );
 
 		foreach ( $links as $link ) {
-			if ( $exclude_excluded && Link_Exclusion::get_instance()->is_excluded( $link, $post_id ) ) {
-				continue;
+			if ( $exclude_excluded ) {
+				// Per-link DB flag (admin "Exclude this link" toggle, or auto-set by system on no-access).
+				if ( $link->is_excluded() ) {
+					continue;
+				}
+				// Global URL pattern / per-post exclusions from Settings.
+				if ( Link_Exclusion::get_instance()->is_excluded( $link, $post_id ) ) {
+					continue;
+				}
 			}
 
 			$collection->add( $link );
@@ -379,15 +386,17 @@ class Link_Repository {
 	 *
 	 * @since 1.2.0
 	 *
-	 * @param integer      $limit          The limit of links to return.
-	 * @param integer      $page           The page of links to return.
-	 * @param array        $status         The status of the links to return.
-	 * @param array        $link_ids       The link ids to query.
-	 * @param array        $archive_status The archive status of the links to return.
-	 * @param string       $order_by       The order by.
-	 * @param string|NULL  $search_term    The search term to query.
-	 * @param string|NULL  $date           The date of the links to return (yy-mm).
-	 * @param boolean|NULL $excluded       Whether to return excluded links.
+	 * @param integer       $limit            The limit of links to return.
+	 * @param integer       $page             The page of links to return.
+	 * @param array         $status           The status of the links to return.
+	 * @param array         $link_ids         The link ids to query.
+	 * @param array         $archive_status   The archive status of the links to return.
+	 * @param string        $order_by         The order by.
+	 * @param string|NULL   $search_term      The search term to query.
+	 * @param string|NULL   $date             The date of the links to return (yy-mm).
+	 * @param boolean|NULL  $excluded         Whether to return excluded links.
+	 * @param string[]|NULL $snapshot_process The snapshot status of the links to return.
+	 * @param boolean|NULL  $has_checks       Whether to return links with or without checks.
 	 *
 	 * @return Link[]
 	 */
@@ -400,8 +409,81 @@ class Link_Repository {
 		string $order_by = self::ORDER_DATE_DESC,
 		?string $search_term = null,
 		?string $date = null,
-		?bool $excluded = null
+		?bool $excluded = null,
+		?array $snapshot_process = null,
+		?bool $has_checks = null
 	): array {
+		$query = $this->build_query( 'select', $limit, $page, $status, $link_ids, $archive_status, $order_by, $search_term, $date, $excluded, $snapshot_process, $has_checks );
+		$rows  = $this->wpdb->get_results( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, Compiled in parts, very hard to escape
+		return array_map( array( $this, 'map_link' ), $rows ?? array() );
+	}
+
+	/**
+	 * Gets the count of links for a given query.
+	 *
+	 * @param integer       $limit            The limit of links to return.
+	 * @param integer       $page             The page of links to return.
+	 * @param array         $status           The status of the links to return.
+	 * @param array         $link_ids         The link ids to query.
+	 * @param array         $archive_status   The archive status of the links to return.
+	 * @param string        $order_by         The order by.
+	 * @param string|NULL   $search_term      The search term to query.
+	 * @param string|NULL   $date             The date of the links to return (yy-mm).
+	 * @param boolean|NULL  $excluded         Whether to return excluded links.
+	 * @param string[]|NULL $snapshot_process The snapshot status of the links to return.
+	 * @param boolean|NULL  $has_checks       Whether to return links with or without checks.
+	 *
+	 * @return integer
+	 */
+	public function count_links(
+		int $limit = 10,
+		int $page = 1,
+		array $status = array(),
+		array $link_ids = array(),
+		array $archive_status = array(),
+		string $order_by = self::ORDER_DATE_DESC,
+		?string $search_term = null,
+		?string $date = null,
+		?bool $excluded = null,
+		?array $snapshot_process = null,
+		?bool $has_checks = null
+	): int {
+		$query = $this->build_query( 'count', $limit, $page, $status, $link_ids, $archive_status, $order_by, $search_term, $date, $excluded, $snapshot_process, $has_checks );
+		return (int) $this->wpdb->get_var( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, Compiled in parts, very hard to escape
+	}
+
+	/**
+	 * Builds a SQL query for links.
+	 *
+	 * @param string        $mode             The query mode: 'select' for SELECT *, 'count' for SELECT COUNT(*).
+	 * @param integer       $limit            The limit of links to return.
+	 * @param integer       $page             The page of links to return.
+	 * @param array         $status           The status of the links to return.
+	 * @param array         $link_ids         The link ids to query.
+	 * @param array         $archive_status   The archive status of the links to return.
+	 * @param string        $order_by         The order by.
+	 * @param string|NULL   $search_term      The search term to query.
+	 * @param string|NULL   $date             The date of the links to return (yy-mm).
+	 * @param boolean|NULL  $excluded         Whether to return excluded links.
+	 * @param string[]|NULL $snapshot_process The snapshot status of the links to return.
+	 * @param boolean|NULL  $has_checks       Whether to return links with or without checks.
+	 *
+	 * @return string
+	 */
+	private function build_query(
+		string $mode = 'select',
+		int $limit = 10,
+		int $page = 1,
+		array $status = array(),
+		array $link_ids = array(),
+		array $archive_status = array(),
+		string $order_by = self::ORDER_DATE_DESC,
+		?string $search_term = null,
+		?string $date = null,
+		?bool $excluded = null,
+		?array $snapshot_process = null,
+		?bool $has_checks = null
+	): string {
 		// Remove any invalid statuses.
 		$status = array_filter(
 			$status,
@@ -436,7 +518,9 @@ class Link_Repository {
 		$date = $date ? gmdate( 'Y-m', strtotime( esc_attr( $date ) ) ) : null;
 
 		// Prepare the query.
-		$query = "SELECT * FROM {$this->table_name}";
+		$query = 'count' === $mode
+			? "SELECT COUNT(*) FROM {$this->table_name}"
+			: "SELECT * FROM {$this->table_name}";
 
 		// Where statement has been used.
 		$where = false;
@@ -474,6 +558,29 @@ class Link_Repository {
 			$where      = true;
 		}
 
+		// If we are looking for links with or without checks, add to the query.
+		if ( null !== $has_checks ) {
+			$query .= true === $where ? ' AND' : ' WHERE';
+			$query .= $has_checks ? ' JSON_LENGTH(`checks`) > 0' : ' JSON_LENGTH(`checks`) = 0';
+			$where  = true;
+		}
+
+		// If we have snapshot process status, add to the query.
+		if ( ! empty( $snapshot_process ) ) {
+			// Remove any invalid snapshot statuses.
+			$snapshot_process = array_filter(
+				$snapshot_process,
+				function ( $status ): bool {
+					return is_string( $status ) && in_array( $status, array( Link::PROCESS_NEW, Link::PROCESS_PENDING, Link::PROCESS_DONE ), true );
+				}
+			);
+
+			$place_holders     = join( ',', array_fill( 0, count( $snapshot_process ), '%s' ) );
+			$snapshot_template = true === $where ? " AND archive_process IN ({$place_holders})" : " WHERE archive_process IN ({$place_holders})";
+			$query            .= $this->wpdb->prepare( $snapshot_template, $snapshot_process ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, Compiled in parts, very hard to escape
+			$where             = true;
+		}
+
 		// If we have a search term, add to the query.
 		if ( $search_term ) {
 			// Prepare the search term.
@@ -489,6 +596,7 @@ class Link_Repository {
 		if ( null !== $excluded ) {
 			$query .= true === $where ? ' AND' : ' WHERE';
 			$query .= $excluded ? ' excluded = 1' : ' excluded = 0';
+			$where  = true;
 		}
 
 		// Add the order by.
@@ -498,16 +606,9 @@ class Link_Repository {
 		$offset = ( $page - 1 ) * $limit;
 		$query .= $this->wpdb->prepare( ' LIMIT %d OFFSET %d', $limit, $offset ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, Compiled in parts, very hard to escape
 
-		// Get the rows.
-		$rows = $this->wpdb->get_results( $query ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, Compiled in parts, very hard to escape
-
-		// If no rows, return an empty collection.
-		if ( empty( $rows ) ) {
-			return array();
-		}
-
-		return array_map( array( $this, 'map_link' ), $rows );
+		return $query;
 	}
+
 
 	/**
 	 * Gets the date range from a defined date.

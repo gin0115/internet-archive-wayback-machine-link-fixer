@@ -12,6 +12,7 @@ declare(strict_types=1);
 namespace Internet_Archive\Wayback_Machine_Link_Fixer\Tests\Processor;
 
 use Internet_Archive\Wayback_Machine_Link_Fixer\Settings\Settings;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Link\Link_Exclusion;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Link\Link_Repository;
 use Internet_Archive\Wayback_Machine_Link_Fixer\WP_Post\WP_Post_Controller;
 
@@ -244,9 +245,9 @@ class Test_WP_Post_Controller extends \WP_UnitTestCase {
 		$this->assertIsArray( $data );
 		$this->assertArrayHasKey( 'linkCheckNonce', $data );
 		$this->assertArrayHasKey( 'linkDelayInDays', $data );
-		$this->assertArrayHasKey( 'linkCheckAjax', $data );
+		$this->assertArrayHasKey( 'restUrl', $data );
 		$this->assertArrayHasKey( 'links', $data );
-		$this->assertArrayHasKey( 'ajaxUrl', $data );
+		$this->assertArrayHasKey( 'fixerOption', $data );
 
 		// Check we have 2 links
 		$this->assertCount( 2, json_decode( $data['links'], true ) );
@@ -300,9 +301,8 @@ class Test_WP_Post_Controller extends \WP_UnitTestCase {
 		$this->assertIsArray( $data );
 		$this->assertArrayHasKey( 'linkCheckNonce', $data );
 		$this->assertArrayHasKey( 'linkDelayInDays', $data );
-		$this->assertArrayHasKey( 'linkCheckAjax', $data );
+		$this->assertArrayHasKey( 'restUrl', $data );
 		$this->assertArrayHasKey( 'links', $data );
-		$this->assertArrayHasKey( 'ajaxUrl', $data );
 		$this->assertArrayHasKey( 'fixerOption', $data );
 
 		// Check we have 0 links
@@ -513,6 +513,43 @@ class Test_WP_Post_Controller extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * @testdox If a post is in the excluded posts list, process_links_in_content should bail silently without setting link meta.
+	 *
+	 * @return void
+	 */
+	public function test_excluded_post_not_processed_by_process_links_in_content(): void {
+		$post_id = self::factory()->post->create();
+
+		// Add some content to the post.
+		$content = 'This is a post with a link to <a href="https://from.post/excluded">example</a>';
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_content' => $content,
+			)
+		);
+
+		// Clear any meta that was set by the save_post hook.
+		\delete_post_meta( $post_id, Settings::LINK_META_KEY );
+
+		// Add the post to the exclusion list.
+		\update_option( Settings::LINK_FIXER_EXCLUDED_POSTS, array( $post_id ) );
+
+		// Process the post.
+		$handler = new WP_Post_Controller();
+		$handler->process_links_in_content( $post_id );
+
+		// The post should NOT have link meta set.
+		$this->assertFalse(
+			\metadata_exists( 'post', $post_id, Settings::LINK_META_KEY ),
+			'The excluded post should not have link meta set.'
+		);
+
+		// Clean up.
+		\delete_option( Settings::LINK_FIXER_EXCLUDED_POSTS );
+	}
+
+	/**
 	 * @testdox When an option is selected to fix links, it should be rendered out the HTML.
 	 *
 	 * @since 1.3.1
@@ -539,10 +576,167 @@ class Test_WP_Post_Controller extends \WP_UnitTestCase {
 		// Render the block.
 		$rendered = do_blocks( $GLOBALS['post']->post_content );
 
-		// Check contains the data-iawmlf-post-links attribute.
-		$this->assertStringContainsString( 'data-iawmlf-post-links', $rendered );
+		// Check contains the link data script tag.
+		$this->assertStringContainsString( '__iawmlf-post-loop-links', $rendered );
 
 		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * @testdox If a post is in the excluded posts list, the link data attribute should not be rendered in the block output.
+	 *
+	 * @return void
+	 */
+	public function test_excluded_post_does_not_render_link_data(): void {
+		// Set the option to render the HTML link output.
+		update_option( Settings::FIXER_OPTION, Settings::FIXER_OPTION_REPLACE_LINK );
+
+		$post_id = self::factory()->post->create();
+
+		$content = 'This is a post with a link to <a href="https://from.post/excluded_render">example</a>';
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_content' => $content,
+				'post_type'    => 'post',
+			)
+		);
+
+		$GLOBALS['post'] = get_post( $post_id );
+
+		// Add the post to the exclusion list.
+		\update_option( Settings::LINK_FIXER_EXCLUDED_POSTS, array( $post_id ) );
+
+		// Render the block.
+		$rendered = do_blocks( $GLOBALS['post']->post_content );
+
+		// Check does NOT contain the link data script tag.
+		$this->assertStringNotContainsString( '__iawmlf-post-loop-links', $rendered );
+
+		// Clean up.
+		unset( $GLOBALS['post'] );
+		\delete_option( Settings::LINK_FIXER_EXCLUDED_POSTS );
+	}
+
+	/**
+	 * @testdox When a link matches a global exclusion pattern, it should not appear in the render_block data attribute output.
+	 *
+	 * @return void
+	 */
+	public function test_excluded_link_not_included_in_render_block_data(): void {
+		// Set the option to render the HTML link output.
+		update_option( Settings::FIXER_OPTION, Settings::FIXER_OPTION_REPLACE_LINK );
+
+		// Add a global exclusion pattern that matches one of the links.
+		update_option( Settings::LINK_EXCLUSIONS, array( '*excluded-domain.com*' ) );
+
+		// Reset the Link_Exclusion static cache so it picks up the new option.
+		$reflection = new \ReflectionClass( Link_Exclusion::class );
+		$property   = $reflection->getProperty( 'exclusions' );
+		$property->setAccessible( true );
+		$property->setValue( null, null );
+
+		$post_id = self::factory()->post->create();
+
+		// Add content with two links — one that will be excluded, one that won't.
+		$content = 'Link one <a href="https://excluded-domain.com/page">excluded</a> and link two <a href="https://allowed-domain.com/page">allowed</a>';
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_content' => $content,
+				'post_type'    => 'post',
+			)
+		);
+
+		$GLOBALS['post'] = get_post( $post_id );
+
+		// Render the block.
+		$rendered = do_blocks( $GLOBALS['post']->post_content );
+
+		// The link data span should be present (we still have one non-excluded link).
+		$this->assertStringContainsString( '__iawmlf-post-loop-links', $rendered );
+
+		$links_data = $this->extract_link_data_from_rendered( $rendered );
+		$this->assertNotNull( $links_data, 'Should find the link data span in rendered output.' );
+		$this->assertIsArray( $links_data );
+
+		// Collect all hrefs from the links data.
+		$hrefs = array_column( $links_data, 'href' );
+
+		// The excluded link should NOT be in the data.
+		$this->assertNotContains( 'https://excluded-domain.com/page', $hrefs, 'Excluded link should not appear in render_block data.' );
+
+		// The allowed link SHOULD be in the data.
+		$this->assertContains( 'https://allowed-domain.com/page', $hrefs, 'Non-excluded link should appear in render_block data.' );
+
+		// Clean up.
+		unset( $GLOBALS['post'] );
+		\delete_option( Settings::LINK_EXCLUSIONS );
+
+		// Reset the Link_Exclusion static cache.
+		$property->setValue( null, null );
+	}
+
+	/**
+	 * @testdox When a link matches a global exclusion pattern and another does not, only the non-excluded link should appear in the render_block data attribute output.
+	 *
+	 * @return void
+	 */
+	public function test_excluded_link_filtered_from_render_block_data_with_mixed_links(): void {
+		// Set the option to render the HTML link output.
+		update_option( Settings::FIXER_OPTION, Settings::FIXER_OPTION_REPLACE_LINK );
+
+		// Add a global exclusion pattern that matches one of the links.
+		update_option( Settings::LINK_EXCLUSIONS, array( '*excluded-domain.com*' ) );
+
+		// Reset the Link_Exclusion static cache so it picks up the new option.
+		$reflection = new \ReflectionClass( Link_Exclusion::class );
+		$property   = $reflection->getProperty( 'exclusions' );
+		$property->setAccessible( true );
+		$property->setValue( null, null );
+
+		$post_id = self::factory()->post->create();
+
+		// Add content with two links — one excluded, one allowed.
+		$content = 'Link one <a href="https://excluded-domain.com/page1">excluded</a> and link two <a href="https://kept-domain.com/page">kept</a>';
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_content' => $content,
+				'post_type'    => 'post',
+			)
+		);
+
+		$GLOBALS['post'] = get_post( $post_id );
+
+		// Render the block.
+		$rendered = do_blocks( $GLOBALS['post']->post_content );
+
+		// The link data span should be present (we still have one non-excluded link).
+		$this->assertStringContainsString( '__iawmlf-post-loop-links', $rendered );
+
+		$links_data = $this->extract_link_data_from_rendered( $rendered );
+		$this->assertNotNull( $links_data, 'Should find the link data span in rendered output.' );
+		$this->assertIsArray( $links_data );
+
+		// Should only have 1 link (the non-excluded one).
+		$this->assertCount( 1, $links_data, 'Only the non-excluded link should be in the data.' );
+
+		// Collect all hrefs from the links data.
+		$hrefs = array_column( $links_data, 'href' );
+
+		// The excluded link should NOT be in the data.
+		$this->assertNotContains( 'https://excluded-domain.com/page1', $hrefs, 'Excluded link should not appear in render_block data.' );
+
+		// The allowed link SHOULD be in the data.
+		$this->assertContains( 'https://kept-domain.com/page', $hrefs, 'Non-excluded link should appear in render_block data.' );
+
+		// Clean up.
+		unset( $GLOBALS['post'] );
+		\delete_option( Settings::LINK_EXCLUSIONS );
+
+		// Reset the Link_Exclusion static cache.
+		$property->setValue( null, null );
 	}
 
 	/**
@@ -572,8 +766,8 @@ class Test_WP_Post_Controller extends \WP_UnitTestCase {
 		// Render the block.
 		$rendered = do_blocks( $GLOBALS['post']->post_content );
 
-		// Check does not contain the data-iawmlf-post-links attribute.
-		$this->assertStringNotContainsString( 'data-iawmlf-post-links', $rendered );
+		// Check does not contain the link data script tag.
+		$this->assertStringNotContainsString( '__iawmlf-post-loop-links', $rendered );
 
 		unset( $GLOBALS['post'] );
 	}
@@ -598,5 +792,348 @@ class Test_WP_Post_Controller extends \WP_UnitTestCase {
 		$enqueued_scripts = wp_scripts()->queue;
 
 		$this->assertNotContains( 'iawm-link-fixer-front-link-checker', $enqueued_scripts );
+	}
+
+	/**
+	 * @testdox A post in the auto archiver excluded posts list should not be added to the wayback machine.
+	 *
+	 * @return void
+	 */
+	public function test_excluded_auto_archiver_post_not_added_to_wayback_machine(): void {
+		// Allow posts to be added.
+		add_filter( 'iawmlf_add_own_content_to_wayback_machine', '__return_false' );
+		add_filter(			'iawmlf_own_content_post_types',			fn () => array( 'post' )			);
+
+		// Create 2 posts.
+		$post_allowed  = self::factory()->post->create_and_get( array( 'post_status' => 'publish' ) );
+		$post_excluded = self::factory()->post->create_and_get( array( 'post_status' => 'publish' ) );
+
+		// Add the second post to the auto archiver exclusion list.
+		\update_option( Settings::AUTO_ARCHIVER_EXCLUDED_POSTS, array( $post_excluded->ID ) );
+
+		$handler = new WP_Post_Controller();
+		$handler->add_own_post_to_wayback_machine( $post_allowed->ID );
+		$handler->add_own_post_to_wayback_machine( $post_excluded->ID );
+
+		// Get all pending action scheduler actions.
+		global $wpdb;
+		$actions = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}actionscheduler_actions WHERE status='pending'" );
+
+		// Should be 1 action (only the allowed post).
+		$this->assertCount( 1, $actions );
+		$this->assertSame( $post_allowed->ID, json_decode( $actions[0]->args )->post_id );
+
+		// Clean up.
+		\delete_option( Settings::AUTO_ARCHIVER_EXCLUDED_POSTS );
+	}
+
+	/**
+	 * @testdox When a post is saved via on_save_post_process_own_post and is in the auto archiver exclusion list, it should not be queued.
+	 *
+	 * @return void
+	 */
+	public function test_on_save_excluded_auto_archiver_post_not_queued(): void {
+		// Enable own content submissions.
+		add_filter( 'iawmlf_add_own_content_to_wayback_machine', '__return_true' );
+		add_filter(
+			'iawmlf_own_content_post_types',
+			fn () => array( 'post' )
+		);
+
+		// Create 2 published posts — save_post fires and both should be queued.
+		$post_allowed  = self::factory()->post->create_and_get( array( 'post_status' => 'publish' ) );
+		$post_excluded = self::factory()->post->create_and_get( array( 'post_status' => 'publish' ) );
+
+		// Assert both posts were queued on creation.
+		global $wpdb;
+		$actions = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}actionscheduler_actions" );
+		$this->assertCount( 2, $actions, 'Both posts should be queued on initial save.' );
+
+		// Now add the second post to the exclusion list.
+		\update_option( Settings::AUTO_ARCHIVER_EXCLUDED_POSTS, array( $post_excluded->ID ) );
+
+		// Re-save both posts — save_post hook fires on_save_post_process_own_post naturally.
+		wp_update_post( array( 'ID' => $post_allowed->ID, 'post_title' => 'Updated allowed' ) );
+		wp_update_post( array( 'ID' => $post_excluded->ID, 'post_title' => 'Updated excluded' ) );
+
+		// The allowed post's original action was cancelled by ensure_single_event and a new one added.
+		// The excluded post's original action is still pending (untouched).
+		// So we expect: 2 pending (excluded original + allowed new), 1 cancelled (allowed original).
+		$pending = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}actionscheduler_actions WHERE status='pending'" );
+		$this->assertCount( 2, $pending, 'Should have 2 pending actions after re-save.' );
+
+		$cancelled = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}actionscheduler_actions WHERE status='canceled'" );
+		$this->assertCount( 1, $cancelled, 'The allowed post original action should be cancelled by ensure_single_event.' );
+
+		// Clean up.
+		\delete_option( Settings::AUTO_ARCHIVER_EXCLUDED_POSTS );
+	}
+
+	/**
+	 * Extract the link data array from rendered HTML by parsing the span's
+	 * data-iawmlf-links attribute via DOMDocument (mirrors browser behaviour).
+	 *
+	 * @param string $rendered The rendered HTML.
+	 *
+	 * @return array<int, array<string, mixed>>|null
+	 */
+	private function extract_link_data_from_rendered( string $rendered ): ?array {
+		$dom  = new \DOMDocument();
+		$prev = libxml_use_internal_errors( true );
+		$dom->loadHTML( '<?xml encoding="UTF-8"><body>' . $rendered . '</body>', LIBXML_NOERROR | LIBXML_NOWARNING );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $prev );
+
+		$xpath = new \DOMXPath( $dom );
+		$nodes = $xpath->query( "//span[contains(concat(' ', normalize-space(@class), ' '), ' __iawmlf-post-loop-links ')]" );
+
+		if ( ! $nodes || 0 === $nodes->length ) {
+			return null;
+		}
+
+		$node = $nodes->item( 0 );
+		$json = $node->getAttribute( 'data-iawmlf-links' );
+		$data = json_decode( $json, true );
+
+		return is_array( $data ) ? $data : null;
+	}
+
+	/**
+	 * Build a published post with the given anchor markup and return the rendered block output.
+	 *
+	 * @param string $content The post content.
+	 *
+	 * @return string The rendered HTML.
+	 */
+	private function render_post_with_content( string $content ): string {
+		update_option( Settings::FIXER_OPTION, Settings::FIXER_OPTION_REPLACE_LINK );
+
+		$post_id = self::factory()->post->create();
+		wp_update_post(
+			array(
+				'ID'           => $post_id,
+				'post_content' => $content,
+				'post_type'    => 'post',
+			)
+		);
+
+		$GLOBALS['post'] = get_post( $post_id );
+
+		return do_blocks( $GLOBALS['post']->post_content );
+	}
+
+	/**
+	 * @testdox The render_block output should use a span with the data-iawmlf-links attribute, not a script tag.
+	 *
+	 * @return void
+	 */
+	public function test_render_block_output_is_span_with_data_attribute(): void {
+		$rendered = $this->render_post_with_content( 'Hi <a href="https://example.com/page">a</a>' );
+
+		$this->assertStringContainsString( '<span', $rendered );
+		$this->assertStringContainsString( 'class="__iawmlf-post-loop-links"', $rendered );
+		$this->assertStringContainsString( 'data-iawmlf-links="', $rendered );
+		$this->assertStringNotContainsString( '<script', $rendered );
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * @testdox The link data span should include the hidden attribute so it is not exposed to the accessibility tree.
+	 *
+	 * @return void
+	 */
+	public function test_render_block_output_includes_hidden_attribute(): void {
+		$rendered = $this->render_post_with_content( 'Hi <a href="https://example.com/page">a</a>' );
+
+		$this->assertMatchesRegularExpression(
+			'/<span[^>]*\bhidden\b[^>]*class="__iawmlf-post-loop-links"|<span[^>]*class="__iawmlf-post-loop-links"[^>]*\bhidden\b/',
+			$rendered,
+			'The link data span should include the hidden attribute.'
+		);
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * @testdox The link data span should be appended after the block content so it does not hijack :first-child CSS rules.
+	 *
+	 * @return void
+	 */
+	public function test_render_block_output_is_appended_after_block_content(): void {
+		$rendered = $this->render_post_with_content( 'Hi <a href="https://example.com/page">a</a>' );
+
+		$content_position = strpos( $rendered, 'href="https://example.com/page"' );
+		$span_position    = strpos( $rendered, '__iawmlf-post-loop-links' );
+
+		$this->assertNotFalse( $content_position, 'Block content with the link should be in the rendered output.' );
+		$this->assertNotFalse( $span_position, 'The link data span should be in the rendered output.' );
+		$this->assertGreaterThan( $content_position, $span_position, 'The data span should appear after the block content.' );
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * @testdox The link data should be parseable from the DOM via getAttribute, mirroring browser behaviour.
+	 *
+	 * @return void
+	 */
+	public function test_link_data_can_be_decoded_from_dom_document(): void {
+		$rendered = $this->render_post_with_content( 'Hi <a href="https://example.com/page">a</a>' );
+
+		$data = $this->extract_link_data_from_rendered( $rendered );
+
+		$this->assertNotNull( $data );
+		$this->assertIsArray( $data );
+		$this->assertContains( 'https://example.com/page', array_column( $data, 'href' ) );
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * @testdox The link data span should survive a single pass of wp_kses_post with the data attribute intact.
+	 *
+	 * @return void
+	 */
+	public function test_link_data_survives_single_wp_kses_post_pass(): void {
+		$rendered = $this->render_post_with_content( 'Hi <a href="https://example.com/page">a</a>' );
+
+		$baseline = $this->extract_link_data_from_rendered( $rendered );
+		$this->assertNotNull( $baseline );
+
+		$kses     = wp_kses_post( $rendered );
+		$kses_data = $this->extract_link_data_from_rendered( $kses );
+
+		$this->assertNotNull( $kses_data, 'Span + data should survive a single wp_kses_post pass.' );
+		$this->assertSame( array_column( $baseline, 'href' ), array_column( $kses_data, 'href' ) );
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * @testdox The link data span should survive multiple consecutive wp_kses_post passes (some themes wrap content more than once).
+	 *
+	 * @return void
+	 */
+	public function test_link_data_survives_multiple_wp_kses_post_passes(): void {
+		$rendered = $this->render_post_with_content( 'Hi <a href="https://example.com/page">a</a>' );
+
+		$baseline = $this->extract_link_data_from_rendered( $rendered );
+		$this->assertNotNull( $baseline );
+
+		$current = $rendered;
+		for ( $i = 0; $i < 5; $i++ ) {
+			$current = wp_kses_post( $current );
+		}
+
+		$kses_data = $this->extract_link_data_from_rendered( $current );
+
+		$this->assertNotNull( $kses_data, 'Span + data should survive 5 wp_kses_post passes.' );
+		$this->assertSame( array_column( $baseline, 'href' ), array_column( $kses_data, 'href' ) );
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * @testdox The link data span should survive the full the_content filter chain followed by wp_kses_post (the case that broke in production).
+	 *
+	 * @return void
+	 */
+	public function test_link_data_survives_the_content_filter_chain(): void {
+		$rendered = $this->render_post_with_content( 'Hi <a href="https://example.com/page">a</a>' );
+
+		$baseline = $this->extract_link_data_from_rendered( $rendered );
+		$this->assertNotNull( $baseline );
+
+		$filtered = apply_filters( 'the_content', $rendered );
+		$kses     = wp_kses_post( $filtered );
+
+		$kses_data = $this->extract_link_data_from_rendered( $kses );
+
+		$this->assertNotNull( $kses_data, 'Span + data should survive the_content filter chain + wp_kses_post.' );
+		$this->assertSame( array_column( $baseline, 'href' ), array_column( $kses_data, 'href' ) );
+
+		// Critically: the JSON should not have leaked as visible text in the rendered output.
+		$dom  = new \DOMDocument();
+		$prev = libxml_use_internal_errors( true );
+		$dom->loadHTML( '<?xml encoding="UTF-8"><body>' . $kses . '</body>', LIBXML_NOERROR | LIBXML_NOWARNING );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $prev );
+
+		$body_text = $dom->textContent;
+		$this->assertStringNotContainsString( 'href":', $body_text, 'JSON keys should not appear as visible text in the rendered output.' );
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * @testdox The link data span should survive nested wp_kses_post wrapping (the category-template scenario).
+	 *
+	 * @return void
+	 */
+	public function test_link_data_survives_nested_wp_kses_post(): void {
+		$rendered = $this->render_post_with_content( 'Hi <a href="https://example.com/page">a</a>' );
+
+		// Simulate a theme that wraps the rendered output in additional kses.
+		$nested = wp_kses_post( '<div class="entry-content">' . wp_kses_post( $rendered ) . '</div>' );
+
+		$kses_data = $this->extract_link_data_from_rendered( $nested );
+
+		$this->assertNotNull( $kses_data, 'Span + data should survive nested wp_kses_post wrapping.' );
+		$this->assertNotEmpty( array_column( $kses_data, 'href' ) );
+
+		unset( $GLOBALS['post'] );
+	}
+
+	/**
+	 * Data provider: URLs containing characters that historically broke escaping or kses round-trips.
+	 *
+	 * @return array<string, array{0: string}>
+	 */
+	public function provide_special_chars_in_urls(): array {
+		return array(
+			'plain'                  => array( 'https://example.com/plain' ),
+			'query_with_ampersand'   => array( 'https://example.com/page?a=1&amp;b=2' ),
+			'percent_encoded_quote'  => array( 'https://example.com/page?title=%22hello%22' ),
+			'percent_encoded_apos'   => array( 'https://example.com/page?title=%27hello%27' ),
+			'unicode_path'           => array( 'https://example.com/%E6%97%A5%E6%9C%AC%E8%AA%9E' ),
+			'emoji_query'            => array( 'https://example.com/page?title=%F0%9F%9A%80' ),
+			'long_url'               => array( 'https://example.com/' . str_repeat( 'abc', 100 ) ),
+		);
+	}
+
+	/**
+	 * @testdox The link data span should round-trip URLs containing characters that stress JSON encoding and kses.
+	 *
+	 * @dataProvider provide_special_chars_in_urls
+	 *
+	 * @param string $href_in_html The href to embed in post content.
+	 *
+	 * @return void
+	 */
+	public function test_link_data_survives_kses_with_special_chars_in_url( string $href_in_html ): void {
+		$content  = sprintf( 'Edge case <a href="%s">link</a>', esc_url( $href_in_html ) );
+		$rendered = $this->render_post_with_content( $content );
+
+		$baseline = $this->extract_link_data_from_rendered( $rendered );
+		$this->assertNotNull( $baseline, 'Should be able to extract link data from initial render.' );
+		$this->assertNotEmpty( array_column( $baseline, 'href' ) );
+
+		// Run through three kses passes — the kses+attribute path should be lossless regardless of payload.
+		$current = $rendered;
+		for ( $i = 0; $i < 3; $i++ ) {
+			$current = wp_kses_post( $current );
+		}
+
+		$kses_data = $this->extract_link_data_from_rendered( $current );
+
+		$this->assertNotNull( $kses_data, 'Span + data should survive 3 wp_kses_post passes for this payload.' );
+		$this->assertSame(
+			array_column( $baseline, 'href' ),
+			array_column( $kses_data, 'href' ),
+			'The href set should be byte-identical before and after multiple kses passes.'
+		);
+
+		unset( $GLOBALS['post'] );
 	}
 }

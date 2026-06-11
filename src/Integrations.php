@@ -20,6 +20,7 @@ use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Dashboard_Page;
 use Internet_Archive\Wayback_Machine_Link_Fixer\WP_Post\WP_Post_Controller;
 use Internet_Archive\Wayback_Machine_Link_Fixer\WP_Post\WP_Post_Table_Controller;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Dashboard_Notifications;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Rest\Rest_Controller;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -41,6 +42,7 @@ final class Integrations {
 	private $setup_wizard;
 	private $dashboard_page;
 	private $plugin_management;
+	private $rest_controller;
 
 	/**
 	 * Creates a new instance of the integrations component.
@@ -56,6 +58,7 @@ final class Integrations {
 		$this->setup_wizard             = new Setup_Wizard();
 		$this->dashboard_page           = new Dashboard_Page();
 		$this->plugin_management        = new Util\Plugin_Management_Service();
+		$this->rest_controller          = new Rest_Controller();
 	}
 
 
@@ -90,6 +93,7 @@ final class Integrations {
 		$this->dashboard_notification->initialize();
 		$this->setup_wizard->initialize();
 		$this->plugin_management->initialize();
+		$this->rest_controller->initialize();
 	}
 
 	// endregion

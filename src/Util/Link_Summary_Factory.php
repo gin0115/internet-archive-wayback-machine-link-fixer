@@ -72,7 +72,7 @@ class Link_Summary_Factory {
 
 		// If the last check was successful, return early.
 		if ( $last_check_status ) {
-			return __( 'The link is archived on archive.org and still working.', 'internet-archive-wayback-machine-link-fixer' );
+			return __( 'This link has an archived version on archive.org, and the original URL is still accessible.', 'internet-archive-wayback-machine-link-fixer' );
 		}
 
 		// If we have more failed checks than the threshold, return the redirected already message.
@@ -84,12 +84,21 @@ class Link_Summary_Factory {
 			);
 		}
 
+		$remaining = Settings::get_failed_count() - $last_failed_count;
+
 		return sprintf(
-		// translators: 1: The number of failed checks. 2: The number of remaining checks before redirect. 3: Plural S if needed.
-			__( 'The link is archived on archive.org but currently not working. It has failed %1$d previous consecutive check%3$s, %2$d more and it will redirect to the archived version.', 'internet-archive-wayback-machine-link-fixer' ),
-			$last_failed_count,
-			Settings::get_failed_count() - $last_failed_count,
-			1 === $last_failed_count ? '' : 's'
+			// translators: 1: The number of consecutive failed checks (e.g. "3 consecutive checks"). 2: The number of remaining failed checks before redirect (e.g. "2 more failed checks").
+			__( 'The link is archived on archive.org but currently not working on the live site. It has failed %1$s, and after %2$s it will redirect to the archived version.', 'internet-archive-wayback-machine-link-fixer' ),
+			sprintf(
+				// translators: %d: The number of consecutive failed checks.
+				_n( '%d consecutive check', '%d consecutive checks', $last_failed_count, 'internet-archive-wayback-machine-link-fixer' ),
+				$last_failed_count
+			),
+			sprintf(
+				// translators: %d: The number of remaining failed checks before redirect.
+				_n( '%d more failed check', '%d more failed checks', $remaining, 'internet-archive-wayback-machine-link-fixer' ),
+				$remaining
+			)
 		);
 	}
 
@@ -104,10 +113,13 @@ class Link_Summary_Factory {
 		}
 
 		return sprintf(
-		// translators: 1: The number of failed checks. 2: The plural S if needed.
-			__( 'The link is not archived on archive.org and currently not working. It has failed %1$d previous consecutive check%2$s.', 'internet-archive-wayback-machine-link-fixer' ),
-			$this->get_consecutive_failed_checks_count(),
-			1 === $this->get_consecutive_failed_checks_count() ? '' : 's'
+			// translators: %s: The number of consecutive failed checks (e.g. "3 consecutive checks").
+			__( 'The link is not archived on archive.org and currently not working on the live site. It has failed %s.', 'internet-archive-wayback-machine-link-fixer' ),
+			sprintf(
+				// translators: %d: The number of consecutive failed checks.
+				_n( '%d consecutive check', '%d consecutive checks', $this->get_consecutive_failed_checks_count(), 'internet-archive-wayback-machine-link-fixer' ),
+				$this->get_consecutive_failed_checks_count()
+			)
 		);
 	}
 
@@ -156,5 +168,49 @@ class Link_Summary_Factory {
 	 */
 	private function is_http_code_valid( int $http_code ): bool {
 		return in_array( $http_code, Settings::get_valid_http_status_codes(), true );
+	}
+
+	/**
+	 * Gets the links current message.
+	 *
+	 * @return string
+	 */
+	public function get_current_message(): string {
+		$message = $this->link->get_message();
+		// If the message doesnt start with error:, return the original message (translated at display time).
+		if ( 0 !== strpos( $message, 'error:' ) ) {
+			if ( 0 === strpos( $message, 'User Requested To Exclude' ) ) {
+				return preg_replace_callback(
+					'/^User Requested To Exclude \((.+) on (.+)\)$/',
+					static function ( array $matches ): string {
+						return sprintf(
+							/* translators: 1: The user login, 2: The date. */
+							__( 'User Requested To Exclude (%1$s on %2$s)', 'internet-archive-wayback-machine-link-fixer' ),
+							$matches[1],
+							$matches[2]
+						);
+					},
+					$message
+				);
+			}
+			return $message;
+		}
+
+		// If the link is still is still pending.
+		if ( Link::PROCESS_DONE !== $this->link->get_archive_process() ) {
+			return sprintf(
+				// translators: 1: The error message.
+				'<span class="dashicons dashicons-info" title="%s"></span> - %s',
+				__( 'Error encountered while processing the link, will retry shortly.', 'internet-archive-wayback-machine-link-fixer' ),
+				iawmlf_get_human_readable_status_message( $message )
+			);
+		}
+
+		return sprintf(
+			// translators: 1: The error message.
+			'<span class="dashicons dashicons-warning" title="%s"></span> - %s',
+			__( 'Error encountered while processing the link, no more retries will be made.', 'internet-archive-wayback-machine-link-fixer' ),
+			iawmlf_get_human_readable_status_message( $message )
+		);
 	}
 }

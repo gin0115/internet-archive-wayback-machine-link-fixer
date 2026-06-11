@@ -82,7 +82,7 @@ class Link_Latest_Snapshot_Action {
 				'link'    => $link,
 				'found'   => true,
 				'updated' => false,
-				'message' => __( 'Link is already an archived link.', 'internet-archive-wayback-machine-link-fixer' ),
+				'message' => __( 'This URL is already an archived link.', 'internet-archive-wayback-machine-link-fixer' ),
 			);
 		}
 
@@ -111,9 +111,13 @@ class Link_Latest_Snapshot_Action {
 		// Update the links archived URL.
 		$link->set_archived_href( $archive_url );
 
-		// If the link is excluded, set the link as valid.
-		if ( $link->is_excluded() ) {
+		// If a system-set exclusion, lift it and clear the stale message.
+		if ( $link->is_excluded() && ! $link->is_manual_exclusion() ) {
 			$link = $link->set_excluded( false );
+
+			if ( '' !== $link->get_message() ) {
+				$link = $link->set_message( '' );
+			}
 		}
 
 		// Update the link in the database.
@@ -123,7 +127,7 @@ class Link_Latest_Snapshot_Action {
 			'link'    => $link,
 			'found'   => true,
 			'updated' => true,
-			'message' => __( 'Link updated.', 'internet-archive-wayback-machine-link-fixer' ),
+			'message' => __( 'Archived URL updated.', 'internet-archive-wayback-machine-link-fixer' ),
 		);
 	}
 }

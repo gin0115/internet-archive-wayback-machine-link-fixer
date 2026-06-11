@@ -354,7 +354,7 @@ class Report_Table extends \WP_List_Table {
 				$this->notices[] = array(
 					'message' => sprintf(
 						// translators: %s is the link url.
-						__( 'It was not possible to check %s', 'internet-archive-wayback-machine-link-fixer' ),
+						__( 'Could not check the status of %s.', 'internet-archive-wayback-machine-link-fixer' ),
 						esc_html( iawmlf_trim_string( $results['link']->get_href(), 54 ) )
 					),
 					'type'    => 'error',
@@ -436,7 +436,7 @@ class Report_Table extends \WP_List_Table {
 				$this->notices[] = array(
 					'message' => sprintf(
 						// translators: %s is the link url.
-						__( 'No archived link found for %s', 'internet-archive-wayback-machine-link-fixer' ),
+						__( 'No archived version found for %s.', 'internet-archive-wayback-machine-link-fixer' ),
 						esc_html( iawmlf_trim_string( $result['link']->get_href(), 54 ) )
 					),
 					'type'    => 'error',
@@ -449,7 +449,7 @@ class Report_Table extends \WP_List_Table {
 				$this->notices[] = array(
 					'message' => sprintf(
 						// translators: %s is the link url.
-						__( 'It was not possible to update %s, the latest archive link is the same', 'internet-archive-wayback-machine-link-fixer' ),
+						__( 'Could not update %s: the archived URL is already the latest.', 'internet-archive-wayback-machine-link-fixer' ),
 						esc_html( iawmlf_trim_string( $result['link']->get_href(), 54 ) )
 					),
 					'type'    => 'notice',
@@ -461,7 +461,7 @@ class Report_Table extends \WP_List_Table {
 			$this->notices[] = array(
 				'message' => sprintf(
 					// translators: %s is the link url.
-					__( 'Link %s updated successfully', 'internet-archive-wayback-machine-link-fixer' ),
+					__( 'Archived URL for %s updated successfully.', 'internet-archive-wayback-machine-link-fixer' ),
 					esc_html( iawmlf_trim_string( $result['link']->get_href(), 54 ) )
 				),
 				'type'    => 'success',
@@ -505,8 +505,8 @@ class Report_Table extends \WP_List_Table {
 			if ( ! $result['job_id'] ) {
 				$this->notices[] = array(
 					'message' => sprintf(
-						// translators: %s is the link url.
-						__( 'Link %1$s could not have a new snapshot created: %2$s', 'internet-archive-wayback-machine-link-fixer' ),
+						// translators: 1: the link URL, 2: error message.
+						__( 'Could not create a new snapshot for %1$s: %2$s', 'internet-archive-wayback-machine-link-fixer' ),
 						iawmlf_trim_string( $result['link']->get_href(), 54 ),
 						esc_html( $result['message'] )
 					),
@@ -519,7 +519,7 @@ class Report_Table extends \WP_List_Table {
 			$this->notices[] = array(
 				'message' => sprintf(
 					// translators: %s is the link url.
-					__( 'Link %s added to the queue and a new snapshot will be created and added as the archived url in the coming minutes..', 'internet-archive-wayback-machine-link-fixer' ),
+					__( 'Link %s added to the queue and a new snapshot will be created and added as the archived URL in the coming minutes.', 'internet-archive-wayback-machine-link-fixer' ),
 					iawmlf_trim_string( $result['link']->get_href(), 54 )
 				),
 				'type'    => 'success',
@@ -704,7 +704,7 @@ class Report_Table extends \WP_List_Table {
 	 */
 	private function define_pagination_args() {
 		// Get the total number of links.
-		$link_count = count( $this->get_links( \PHP_INT_MAX, 1 ) );
+		$link_count = $this->count_links( \PHP_INT_MAX, 1 );
 		// Set the pagination args.
 		$this->set_pagination_args(
 			array(
@@ -809,8 +809,8 @@ class Report_Table extends \WP_List_Table {
 			<option value=""><?php esc_html_e( 'Show with or without archived link', 'internet-archive-wayback-machine-link-fixer' ); ?></option>
 			<?php
 			$has_archive = array(
-				Link_Repository::LINK_HAS_ARCHIVE => __( 'Show links with archived link', 'internet-archive-wayback-machine-link-fixer' ),
-				Link_Repository::LINK_NO_ARCHIVE  => __( 'Show links without archived link', 'internet-archive-wayback-machine-link-fixer' ),
+				Link_Repository::LINK_HAS_ARCHIVE => __( 'Show links with archived version', 'internet-archive-wayback-machine-link-fixer' ),
+				Link_Repository::LINK_NO_ARCHIVE  => __( 'Show links without archived version', 'internet-archive-wayback-machine-link-fixer' ),
 			);
 			foreach ( $has_archive as $archive => $label ) {
 				printf(
@@ -901,6 +901,29 @@ class Report_Table extends \WP_List_Table {
 	 */
 	private function get_links( int $limit = 10, int $page = 1, array $status = array() ): array {
 		return $this->links->query_links(
+			$limit,
+			$page,
+			array( $this->get_status_from_url() ),
+			$this->get_link_ids_from_url(),
+			array( $this->get_archived_status_from_url() ),
+			$this->get_sort_order_from_url(),
+			$this->get_search_term(),
+			null,
+			is_null( $this->get_excluded_status_from_url() ) ? null : boolval( $this->get_excluded_status_from_url() )
+		);
+	}
+
+	/**
+	 * Count links based on the query being used on this table.
+	 *
+	 * @param integer $limit  The limit of links to return.
+	 * @param integer $page   The page of links to return.
+	 * @param array   $status The status of the links to return.
+	 *
+	 * @return integer
+	 */
+	private function count_links( int $limit = 10, int $page = 1, array $status = array() ): int {
+		return $this->links->count_links(
 			$limit,
 			$page,
 			array( $this->get_status_from_url() ),
@@ -1032,8 +1055,7 @@ class Report_Table extends \WP_List_Table {
 		$this->items = $this->get_links(
 			$this->get_links_per_page(),
 			$this->get_pagenum(),
-			array( $this->get_status_from_url() ),
-			$this->get_search_term()
+			array( $this->get_status_from_url() )
 		);
 	}
 
@@ -1087,7 +1109,7 @@ class Report_Table extends \WP_List_Table {
 			case self::COLUMN_LINK_ARCHIVE:
 				// If the link is excluded, return the excluded icon.
 				if ( $item->is_excluded() ) {
-					return $this->get_dashicon( 'dashicons-warning', __( 'Link is excluded from being archived.', 'internet-archive-wayback-machine-link-fixer' ) );
+					return $this->get_dashicon( 'dashicons-warning', __( 'The link is excluded from being archived.', 'internet-archive-wayback-machine-link-fixer' ) );
 				}
 
 				if ( $item->has_archived_href() ) {
@@ -1200,7 +1222,7 @@ class Report_Table extends \WP_List_Table {
 			: __( 'No HTTP Code', 'internet-archive-wayback-machine-link-fixer' );
 
 		return sprintf(
-			// translators: %1$s is the last check date, %2$s is the last check http code.
+			// translators: %1$s: last check date (e.g. "5 Jan 2025"), %2$s: HTTP status code (e.g. "404 status")
 			__( '%1$s with %2$s', 'internet-archive-wayback-machine-link-fixer' ),
 			$last_check['date']
 				? DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $last_check['date'] )->format( get_option( 'date_format' ) )

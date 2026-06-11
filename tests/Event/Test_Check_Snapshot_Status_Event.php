@@ -70,8 +70,10 @@ class Test_Check_Snapshot_Status_Event extends \WP_UnitTestCase {
 	public function test_error_status_sets_message(): void {
 		$this->set_snapshot_client_response(
 			array(
-				'status'  => 'error',
-				'message' => 'Error message',
+				'status'     => 'error',
+				'message'    => 'Error message',
+				'status_ext' => 'issue:no-access',
+
 			)
 		);
 
@@ -92,8 +94,8 @@ class Test_Check_Snapshot_Status_Event extends \WP_UnitTestCase {
 		$updated_link = $this->link_repository->find_by_id( $link->get_id() );
 
 		// Check the message is set.
-		$this->assertEquals( 'Error message', $updated_link->get_message() );
-		$this->assertEquals(Link::PROCESS_PENDING, $updated_link->get_archive_process() );
+		$this->assertEquals( 'issue:no-access', $updated_link->get_message() );
+		$this->assertEquals( Link::PROCESS_PENDING, $updated_link->get_archive_process() );
 	}
 
 	/**
@@ -128,7 +130,7 @@ class Test_Check_Snapshot_Status_Event extends \WP_UnitTestCase {
 
 		// Check the message is set.
 		$this->assertTrue( $updated_link->is_excluded() );
-		$this->assertEquals(Link::PROCESS_DONE, $updated_link->get_archive_process() );
+		$this->assertEquals( Link::PROCESS_DONE, $updated_link->get_archive_process() );
 	}
 
 	/**
@@ -281,19 +283,28 @@ class Test_Check_Snapshot_Status_Event extends \WP_UnitTestCase {
 		$this->assertCount( 1, $actions );
 
 		$this->assertEquals( 'iawmlf_update_archive_url', $actions[0]->hook );
-		$this->assertEquals( json_encode( array( 'link_id' => $link->get_id(), 'attempt' => 0 ) ), $actions[0]->args );
+		$this->assertEquals(
+			json_encode(
+				array(
+					'link_id' => $link->get_id(),
+					'attempt' => 0,
+				)
+			),
+			$actions[0]->args
+		);
 	}
 
 	/**
-	 * @testdox If a link is excluded, but now allows a snapshot to be created, without error, remove the excluded status.
+	 * @testdox If a system-excluded link (no-access) gets a success status, the exclusion is lifted and the stale error message cleared.
 	 *
 	 * @return void
 	 */
-	public function test_success_status_removes_excluded_status(): void {
+	public function test_success_status_lifts_system_exclusion_and_clears_message(): void {
 		$this->set_snapshot_client_response( array( 'status' => 'success' ) );
 
 		$link = $this->link_repository->upsert( new Link( 'https://example.com' ) );
 		$link->set_excluded();
+		$link->set_message( 'error:no-access' );
 		$this->link_repository->upsert( $link );
 
 		$event = new Check_Snapshot_Status_Event();
@@ -301,11 +312,13 @@ class Test_Check_Snapshot_Status_Event extends \WP_UnitTestCase {
 
 		$event( $link->get_id(), 'fake-id', 0 );
 
-		// Get the link from the repository.
 		$updated_link = $this->link_repository->find_by_id( $link->get_id() );
 
-		// Check the link is not excluded.
+		// System exclusion lifted on success.
 		$this->assertFalse( $updated_link->is_excluded() );
+
+		// Stale error message is cleared.
+		$this->assertSame( '', $updated_link->get_message() );
 
 		// Check the link is in the queue.
 		$actions = $this->wpdb->get_results( "SELECT * FROM {$this->wpdb->prefix}actionscheduler_actions" );
@@ -313,6 +326,47 @@ class Test_Check_Snapshot_Status_Event extends \WP_UnitTestCase {
 		$this->assertCount( 1, $actions );
 
 		$this->assertEquals( 'iawmlf_update_archive_url', $actions[0]->hook );
-		$this->assertEquals( json_encode( array( 'link_id' => $link->get_id(), 'attempt' => 0 ) ), $actions[0]->args );
+		$this->assertEquals(
+			json_encode(
+				array(
+					'link_id' => $link->get_id(),
+					'attempt' => 0,
+				)
+			),
+			$actions[0]->args
+		);
+	}
+
+	/**
+	 * @testdox A manually excluded link keeps its exclusion and message even when the snapshot status comes back success.
+	 *
+	 * @return void
+	 */
+	public function test_success_status_preserves_manual_exclusion_and_message(): void {
+		$manual_message = 'User Requested To Exclude (admin on 28 May 2026)';
+
+		$this->set_snapshot_client_response( array( 'status' => 'success' ) );
+
+		$link = $this->link_repository->upsert( new Link( 'https://example.com' ) );
+		$link->set_excluded();
+		$link->set_message( $manual_message );
+		$this->link_repository->upsert( $link );
+
+		$event = new Check_Snapshot_Status_Event();
+		$event->setup();
+
+		$event( $link->get_id(), 'fake-id', 0 );
+
+		$updated_link = $this->link_repository->find_by_id( $link->get_id() );
+
+		// Manual exclusion is sacred.
+		$this->assertTrue( $updated_link->is_excluded(), 'Manual exclusion must survive a successful snapshot status.' );
+		$this->assertSame( $manual_message, $updated_link->get_message(), 'Manual exclusion message must not be touched.' );
+
+		// Still queues the archive URL update regardless of exclusion state.
+		$actions = $this->wpdb->get_results( "SELECT * FROM {$this->wpdb->prefix}actionscheduler_actions" );
+
+		$this->assertCount( 1, $actions );
+		$this->assertEquals( 'iawmlf_update_archive_url', $actions[0]->hook );
 	}
 }
