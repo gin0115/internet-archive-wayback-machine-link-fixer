@@ -2,7 +2,8 @@
 	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
 	"meta": {
 		"title": "Wayback Link Fixer — multisite SEPARATE mode QA",
-		"description": "Multisite (main + garren + dexter) in separate-tables mode: each site has its own links table with overlapping URLs, ready for separate-to-shared merge QA."
+		"description": "Multisite (main + garren + dexter) in separate-tables mode: each site has its own links table with overlapping URLs, ready for separate-to-shared merge QA.",
+		"author": "gin0115"
 	},
 	"preferredVersions": {
 		"php": "8.2",

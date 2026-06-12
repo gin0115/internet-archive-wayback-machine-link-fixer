@@ -2,7 +2,8 @@
 	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
 	"meta": {
 		"title": "Wayback Link Fixer — multisite SHARED mode QA",
-		"description": "Multisite (main + garren + dexter), plugin network-activated in shared mode, 60 links in the shared table, posts on every site."
+		"description": "Multisite (main + garren + dexter), plugin network-activated in shared mode, 60 links in the shared table, posts on every site.",
+		"author": "gin0115"
 	},
 	"preferredVersions": {
 		"php": "8.2",

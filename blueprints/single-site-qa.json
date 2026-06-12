@@ -2,7 +2,8 @@
 	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
 	"meta": {
 		"title": "Wayback Link Fixer — single site QA",
-		"description": "Single-site install, onboarding completed, 150 seeded links in mixed states plus posts containing them."
+		"description": "Single-site install, onboarding completed, 150 seeded links in mixed states plus posts containing them.",
+		"author": "gin0115"
 	},
 	"preferredVersions": {
 		"php": "8.2",
