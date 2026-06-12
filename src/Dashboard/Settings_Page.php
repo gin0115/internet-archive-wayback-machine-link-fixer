@@ -1367,8 +1367,6 @@ class Settings_Page {
 
 		$show_cloning_progress = $clone_state && in_array( $clone_state->get_status(), array( Table_Clone_State::STATUS_ERROR, Table_Clone_State::STATUS_RUNNING, Table_Clone_State::STATUS_COMPLETED ), true );
 
-		dump( $clone_state, \get_defined_vars() );
-
 		if ( $is_network_admin ) {
 			// Editable dropdown for network admin.
 			?>

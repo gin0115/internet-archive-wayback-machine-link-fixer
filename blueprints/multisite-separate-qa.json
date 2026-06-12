@@ -65,5 +65,10 @@
 			"step": "wp-cli",
 			"command": "wp eval-file /wordpress/iawmlf-seed.php"
 		}
-	]
+	],
+	"constants": {
+		"WP_DEBUG": true,
+		"WP_DEBUG_LOG": true,
+		"WP_DEBUG_DISPLAY": false
+	}
 }
