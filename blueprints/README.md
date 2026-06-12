@@ -23,12 +23,15 @@ https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.co
 
 ## How the plugin gets in
 
-Each blueprint installs the plugin from a GitHub **release asset** via
-Playground's plugin proxy:
+Each blueprint installs the plugin from the GitHub **release asset** directly:
 
 ```
-https://playground.wordpress.net/plugin-proxy.php?org=gin0115&repo=internet-archive-wayback-machine-link-fixer&release=qa-preview&asset=internet-archive-wayback-machine-link-fixer.zip
+https://github.com/gin0115/internet-archive-wayback-machine-link-fixer/releases/download/qa-preview/internet-archive-wayback-machine-link-fixer.zip
 ```
+
+fetched through Playground's CORS proxy (the blueprints set
+`"corsProxy": "https://cors.wordpress.net/proxy.php"` — the old
+github-proxy.com service was shut down in early 2026).
 
 The existing `.github/workflows/release.yml` builds and attaches that zip
 automatically whenever a release is created — so the QA flow is:

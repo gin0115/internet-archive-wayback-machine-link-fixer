@@ -18,19 +18,37 @@
 			"step": "installPlugin",
 			"pluginData": {
 				"resource": "url",
-				"url": "https://playground.wordpress.net/plugin-proxy.php?org=gin0115&repo=internet-archive-wayback-machine-link-fixer&release=qa-preview&asset=internet-archive-wayback-machine-link-fixer.zip"
+				"url": "https://github.com/gin0115/internet-archive-wayback-machine-link-fixer/releases/download/qa-preview/internet-archive-wayback-machine-link-fixer.zip"
 			},
-			"options": { "activate": true }
+			"options": {
+				"activate": true
+			}
 		},
-		{ "step": "wp-cli", "command": "wp option update iawmlf_post_activation_onboarding iawmlf_onboarding_completed" },
-		{ "step": "wp-cli", "command": "wp option update iawmlf_setup_wizard_completed 1" },
-		{ "step": "wp-cli", "command": "wp option update iawmlf_process_links 1" },
-		{ "step": "wp-cli", "command": "wp option update iawmlf_fixer_option replace_link" },
+		{
+			"step": "wp-cli",
+			"command": "wp option update iawmlf_post_activation_onboarding iawmlf_onboarding_completed"
+		},
+		{
+			"step": "wp-cli",
+			"command": "wp option update iawmlf_setup_wizard_completed 1"
+		},
+		{
+			"step": "wp-cli",
+			"command": "wp option update iawmlf_process_links 1"
+		},
+		{
+			"step": "wp-cli",
+			"command": "wp option update iawmlf_fixer_option replace_link"
+		},
 		{
 			"step": "writeFile",
 			"path": "/wordpress/iawmlf-seed.php",
 			"data": "<?php\nglobal $wpdb;\n$t = $wpdb->prefix . 'iawmlf_link_archive';\nfor ( $i = 1; $i <= 150; $i++ ) {\n\t$broken = ( 0 === $i % 3 ) ? 1 : 0;\n\t$wpdb->insert(\n\t\t$t,\n\t\tarray(\n\t\t\t'url'             => 'https://example.com/qa-' . $i,\n\t\t\t'is_broken'       => $broken,\n\t\t\t'archived'        => ( 0 === $i % 4 ) ? 'https://web.archive.org/web/2024/https://example.com/qa-' . $i : null,\n\t\t\t'checks'          => $broken ? '[\"2026-01-01\",\"2026-02-01\"]' : '[]',\n\t\t\t'message'         => '',\n\t\t\t'redirect_url'    => '',\n\t\t\t'excluded'        => ( 0 === $i % 25 ) ? 1 : 0,\n\t\t\t'archive_process' => $broken ? 'done' : 'new',\n\t\t)\n\t);\n}\nfor ( $p = 1; $p <= 3; $p++ ) {\n\t$c = '';\n\tfor ( $j = 1; $j <= 10; $j++ ) {\n\t\t$n  = ( ( $p - 1 ) * 10 ) + $j;\n\t\t$c .= '<p><a href=\"https://example.com/qa-' . $n . '\">QA link ' . $n . '</a></p>';\n\t}\n\twp_insert_post( array( 'post_title' => 'QA Post ' . $p, 'post_content' => $c, 'post_status' => 'publish' ) );\n}\necho 'SEEDED ' . (int) $wpdb->get_var( \"SELECT COUNT(*) FROM `$t`\" ) . \" links\\n\";\n"
 		},
-		{ "step": "wp-cli", "command": "wp eval-file /wordpress/iawmlf-seed.php" }
-	]
+		{
+			"step": "wp-cli",
+			"command": "wp eval-file /wordpress/iawmlf-seed.php"
+		}
+	],
+	"corsProxy": "https://cors.wordpress.net/proxy.php"
 }
