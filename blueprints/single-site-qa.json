@@ -19,7 +19,7 @@
 			"step": "installPlugin",
 			"pluginData": {
 				"resource": "url",
-				"url": "https://raw.githubusercontent.com/gin0115/internet-archive-wayback-machine-link-fixer/495bfad0/blueprints/dist/internet-archive-wayback-machine-link-fixer.zip"
+				"url": "https://raw.githubusercontent.com/gin0115/internet-archive-wayback-machine-link-fixer/fa15be94/blueprints/dist/internet-archive-wayback-machine-link-fixer.zip"
 			},
 			"options": {
 				"activate": true
