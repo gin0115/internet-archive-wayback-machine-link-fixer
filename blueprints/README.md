@@ -13,37 +13,36 @@ no install, runs entirely in the browser, auto-logged-in as `admin`.
 
 ## Launch links
 
-Replace `BRANCH` with the branch the blueprints live on:
+```
+https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/gin0115/internet-archive-wayback-machine-link-fixer/multisite_update-migrations-for-multsite-mode/blueprints/single-site-qa.json
+https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/gin0115/internet-archive-wayback-machine-link-fixer/multisite_update-migrations-for-multsite-mode/blueprints/multisite-shared-qa.json
+https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/gin0115/internet-archive-wayback-machine-link-fixer/multisite_update-migrations-for-multsite-mode/blueprints/multisite-separate-qa.json
+```
 
-```
-https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/gin0115/internet-archive-wayback-machine-link-fixer/BRANCH/blueprints/single-site-qa.json
-https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/gin0115/internet-archive-wayback-machine-link-fixer/BRANCH/blueprints/multisite-shared-qa.json
-https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/gin0115/internet-archive-wayback-machine-link-fixer/BRANCH/blueprints/multisite-separate-qa.json
-```
+raw.githubusercontent caches by path for ~5 minutes and ignores query
+strings — after editing a blueprint, either wait it out or share a
+commit-pinned link (swap the branch segment for the commit SHA).
 
 ## How the plugin gets in
 
-Each blueprint installs the plugin from the GitHub **release asset** directly:
+Each blueprint installs the plugin from a zip **committed in this repo** at
+`blueprints/dist/internet-archive-wayback-machine-link-fixer.zip`, served via
+raw.githubusercontent.com (which sends proper CORS headers). The URL is
+pinned to the commit that contains the zip.
 
-```
-https://github.com/gin0115/internet-archive-wayback-machine-link-fixer/releases/download/qa-preview/internet-archive-wayback-machine-link-fixer.zip
-```
+Why not the GitHub release asset? Playground's browser fetch needs CORS:
+`plugin-proxy.php` no longer supports release assets, github-proxy.com was
+shut down in early 2026, and `cors.wordpress.net` refuses to follow GitHub's
+release-download redirect. raw.githubusercontent is the reliable path.
 
-fetched through Playground's CORS proxy (the blueprints set
-`"corsProxy": "https://cors.wordpress.net/proxy.php"` — the old
-github-proxy.com service was shut down in early 2026).
+### Refreshing the QA build
 
-The existing `.github/workflows/release.yml` builds and attaches that zip
-automatically whenever a release is created — so the QA flow is:
-
-1. Push the branch.
-2. Create a (pre)release tagged `qa-preview` targeting it — the workflow
-   builds `internet-archive-wayback-machine-link-fixer.zip` (i18n + no-dev
-   vendor + built assets) and attaches it.
-3. Share the launch links above.
-
-To point QA at a newer build, either re-cut the `qa-preview` release or
-change the `release=` value in the blueprints.
+1. Cut/re-cut the `qa-preview` release on the branch — the existing
+   `.github/workflows/release.yml` builds and attaches the canonical zip
+   (i18n + no-dev vendor + built assets).
+2. Download that asset and commit it over `blueprints/dist/…zip`
+   (`git add -f` — the `dist` dir is gitignored).
+3. Update the pinned commit SHA in the three blueprints' `installPlugin` URL.
 
 ## Caveats
 
