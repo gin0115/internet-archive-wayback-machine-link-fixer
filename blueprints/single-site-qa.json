@@ -18,7 +18,7 @@
 			"step": "installPlugin",
 			"pluginData": {
 				"resource": "url",
-				"url": "https://github.com/gin0115/internet-archive-wayback-machine-link-fixer/releases/download/qa-preview/internet-archive-wayback-machine-link-fixer.zip"
+				"url": "https://cors.wordpress.net/proxy.php?https://github.com/gin0115/internet-archive-wayback-machine-link-fixer/releases/download/qa-preview/internet-archive-wayback-machine-link-fixer.zip"
 			},
 			"options": {
 				"activate": true
@@ -49,6 +49,5 @@
 			"step": "wp-cli",
 			"command": "wp eval-file /wordpress/iawmlf-seed.php"
 		}
-	],
-	"corsProxy": "https://cors.wordpress.net/proxy.php"
+	]
 }
