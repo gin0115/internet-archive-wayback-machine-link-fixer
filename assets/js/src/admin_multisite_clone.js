@@ -569,9 +569,12 @@
 			if (this.value !== this.dataset.originalValue) {
 				populateSitesCheckboxes();
 				show(cloneConfig);
+				// resetCloneUI() re-enables every config input, so it must run
+				// BEFORE the confirm/start lockout or the Start button ends up
+				// enabled without the confirmation checkbox being ticked.
+				resetCloneUI();
 				if (cloneConfirmCheckbox) cloneConfirmCheckbox.checked = false;
 				if (cloneStartButton) cloneStartButton.disabled = true;
-				resetCloneUI();
 				setMultisiteFieldsDisabled(true);
 			} else {
 				hide(cloneConfig);

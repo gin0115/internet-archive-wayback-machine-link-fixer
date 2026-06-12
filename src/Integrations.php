@@ -11,6 +11,7 @@
 namespace Internet_Archive\Wayback_Machine_Link_Fixer;
 
 use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Multisite;
+use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Site_Lifecycle;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Ajax\Ajax_Controller;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Report_Page;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Dashboard\Setup_Wizard;
@@ -43,6 +44,7 @@ final class Integrations {
 	private $dashboard_page;
 	private $plugin_management;
 	private $rest_controller;
+	private $site_lifecycle;
 
 	/**
 	 * Creates a new instance of the integrations component.
@@ -59,6 +61,7 @@ final class Integrations {
 		$this->dashboard_page           = new Dashboard_Page();
 		$this->plugin_management        = new Util\Plugin_Management_Service();
 		$this->rest_controller          = new Rest_Controller();
+		$this->site_lifecycle           = new Site_Lifecycle();
 	}
 
 
@@ -75,6 +78,10 @@ final class Integrations {
 	 * @return  void
 	 */
 	public function initialize(): void {
+
+		// Network-level lifecycle hooks register before the per-site gate:
+		// site created/deleted events concern sites other than the current one.
+		$this->site_lifecycle->initialize();
 
 		// If a multisite.
 		if ( Multisite::is_network_active() ) {

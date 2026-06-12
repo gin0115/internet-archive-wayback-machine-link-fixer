@@ -115,13 +115,6 @@ class Clone_Process_Site_Ajax {
 
 				$clone_state->save();
 			}
-
-			wp_send_json_success(
-				array(
-					'site_id' => $site_id,
-					'log'     => $table_manager->get_log(),
-				)
-			);
 		} catch ( \Throwable $th ) {
 			// Update state with error log (reuse state loaded above).
 			if ( $clone_state ) {
@@ -148,5 +141,15 @@ class Clone_Process_Site_Ajax {
 				)
 			);
 		}
+
+		// Success response is sent outside the try block so a die() converted
+		// to an exception (as in the AJAX test framework) is never re-caught
+		// and double-responded by the error path above.
+		wp_send_json_success(
+			array(
+				'site_id' => $site_id,
+				'log'     => $table_manager->get_log(),
+			)
+		);
 	}
 }

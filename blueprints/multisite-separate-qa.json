@@ -1,0 +1,40 @@
+{
+	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
+	"meta": {
+		"title": "Wayback Link Fixer — multisite SEPARATE mode QA",
+		"description": "Multisite (main + garren + dexter) in separate-tables mode: each site has its own links table with overlapping URLs, ready for separate-to-shared merge QA."
+	},
+	"preferredVersions": {
+		"php": "8.2",
+		"wp": "latest"
+	},
+	"features": {
+		"networking": true
+	},
+	"login": true,
+	"landingPage": "/wp-admin/network/admin.php?page=iawmlf_settings",
+	"steps": [
+		{ "step": "enableMultisite" },
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "url",
+				"url": "https://playground.wordpress.net/plugin-proxy.php?org=gin0115&repo=internet-archive-wayback-machine-link-fixer&release=qa-preview&asset=internet-archive-wayback-machine-link-fixer.zip"
+			},
+			"options": { "activate": false }
+		},
+		{ "step": "wp-cli", "command": "wp plugin activate internet-archive-wayback-machine-link-fixer --network" },
+		{ "step": "wp-cli", "command": "wp site create --slug=garren --title=Garren" },
+		{ "step": "wp-cli", "command": "wp site create --slug=dexter --title=Dexter" },
+		{ "step": "wp-cli", "command": "wp network meta update 1 iawmlf_post_activation_onboarding iawmlf_onboarding_completed" },
+		{ "step": "wp-cli", "command": "wp network meta update 1 iawmlf_setup_wizard_completed 1" },
+		{ "step": "wp-cli", "command": "wp network meta update 1 iawmlf_process_links 1" },
+		{ "step": "wp-cli", "command": "wp network meta update 1 iawmlf_multisite_links_table_mode separate" },
+		{
+			"step": "writeFile",
+			"path": "/wordpress/iawmlf-seed.php",
+			"data": "<?php\nglobal $wpdb;\nforeach ( get_sites() as $s ) {\n\t$id = (int) $s->blog_id;\n\t\\Internet_Archive\\Wayback_Machine_Link_Fixer\\Migration\\Migrations::multisite_up( $id );\n\t$t = $wpdb->get_blog_prefix( $id ) . 'iawmlf_link_archive';\n\tfor ( $i = 1; $i <= 20; $i++ ) {\n\t\t$broken = ( 0 === $i % 4 ) ? 1 : 0;\n\t\t$wpdb->insert(\n\t\t\t$t,\n\t\t\tarray(\n\t\t\t\t'url'             => 'https://example.com/site' . $id . '-link-' . $i,\n\t\t\t\t'is_broken'       => $broken,\n\t\t\t\t'archived'        => null,\n\t\t\t\t'checks'          => $broken ? '[\"2026-0' . ( ( $id % 9 ) + 1 ) . '-01\"]' : '[]',\n\t\t\t\t'message'         => '',\n\t\t\t\t'redirect_url'    => '',\n\t\t\t\t'excluded'        => 0,\n\t\t\t\t'archive_process' => 'new',\n\t\t\t)\n\t\t);\n\t}\n\tfor ( $i = 1; $i <= 5; $i++ ) {\n\t\t$wpdb->insert(\n\t\t\t$t,\n\t\t\tarray(\n\t\t\t\t'url'             => 'https://example.com/common-link-' . $i,\n\t\t\t\t'is_broken'       => ( 1 === $id % 2 ) ? 1 : 0,\n\t\t\t\t'archived'        => null,\n\t\t\t\t'checks'          => '[\"2026-0' . ( ( $id % 9 ) + 1 ) . '-15\"]',\n\t\t\t\t'message'         => '',\n\t\t\t\t'redirect_url'    => '',\n\t\t\t\t'excluded'        => 0,\n\t\t\t\t'archive_process' => 'new',\n\t\t\t)\n\t\t);\n\t}\n\tswitch_to_blog( $id );\n\twp_insert_post( array( 'post_title' => 'QA Post (site ' . $id . ')', 'post_content' => '<p><a href=\"https://example.com/site' . $id . '-link-1\">Own link</a></p><p><a href=\"https://example.com/common-link-1\">Common link</a></p>', 'post_status' => 'publish' ) );\n\trestore_current_blog();\n\techo 'site ' . $id . ' table ' . $t . ' rows ' . (int) $wpdb->get_var( \"SELECT COUNT(*) FROM `$t`\" ) . \"\\n\";\n}\n"
+		},
+		{ "step": "wp-cli", "command": "wp eval-file /wordpress/iawmlf-seed.php" }
+	]
+}

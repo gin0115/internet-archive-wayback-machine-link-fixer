@@ -947,4 +947,58 @@ class Settings {
 		delete_option( self::CAST_ARCHIVED_TO_HTTPS );
 		delete_option( self::LINK_ICON );
 	}
+
+	/**
+	 * Clear all the network-level options (multisite uninstall).
+	 *
+	 * On multisite every setting is stored at network level
+	 * (see get_multisite_aware_option), so the full settings list is removed
+	 * along with the multisite-only keys (mode, available sites, clone state).
+	 *
+	 * @since 2.0.0
+	 *
+	 * @return void
+	 */
+	public static function clear_all_network_options(): void {
+		if ( ! is_multisite() ) {
+			return;
+		}
+
+		$network_id = get_current_network_id();
+
+		$option_keys = array(
+			self::PROCESS_LINKS,
+			self::ALLOWED_POST_TYPES,
+			self::MIGRATIONS_KEY,
+			self::DROP_TABLES_ON_UNINSTALL_KEY,
+			self::LINK_EXCLUSIONS,
+			self::LINK_FIXER_EXCLUDED_POSTS,
+			self::SCAN_EXISTING_POSTS,
+			self::ARCHIVE_ORG_SECRET_KEY,
+			self::ARCHIVE_ORG_ACCESS_KEY,
+			self::FIXER_OPTION,
+			self::ARCHIVE_ORG_STATUS_KEY,
+			self::ARCHIVE_ORG_CREDS_VALID_KEY,
+			self::ALLOW_OWN_CONTENT_SUBMISSIONS,
+			self::ALLOWED_OWN_CONTENT_POST_TYPES,
+			self::ROUTINELY_UPDATE_WAYBACK_MACHINE,
+			self::ROUTINELY_UPDATE_WAYBACK_MACHINE_INTERVAL,
+			self::AUTO_ARCHIVER_EXCLUDED_POSTS,
+			self::POST_ACTIVATION_ONBOARDING_KEY,
+			self::MINIMUM_CHECKS_BEFORE_BROKEN,
+			self::LINK_CHECK_DURATION_IN_DAYS,
+			self::SETUP_WIZARD_STEP_KEY,
+			self::SETUP_WIZARD_COMPLETED_KEY,
+			self::ONBOARDING_DATE_KEY,
+			self::CAST_ARCHIVED_TO_HTTPS,
+			self::LINK_ICON,
+			self::MULTISITE_LINKS_TABLE_MODE,
+			self::MULTISITE_AVAILABLE_SITES,
+			self::TABLE_CLONE_STATE,
+		);
+
+		foreach ( $option_keys as $option_key ) {
+			delete_network_option( $network_id, $option_key );
+		}
+	}
 }

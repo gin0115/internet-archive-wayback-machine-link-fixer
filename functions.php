@@ -136,9 +136,56 @@ function iawmlf_uninstall(): void {
 		return;
 	}
 
+	// Multisite needs every site's table and the network-level options handled.
+	if ( is_multisite() ) {
+		iawmlf_uninstall_multisite();
+		return;
+	}
+
 	Migrations::down();
 	Settings::clear_all_options();
 	WP_Post_Controller::clear_all_post_meta();
+}
+
+/**
+ * Network-aware uninstall: removes per-site link tables, per-blog options and
+ * post meta for every site, then the shared table and all network options.
+ *
+ * @since 2.0.0
+ *
+ * @return void
+ */
+function iawmlf_uninstall_multisite(): void {
+	global $wpdb;
+
+	$network_id   = get_current_network_id();
+	$shared_table = Settings::get_shared_multisite_link_table_name();
+
+	foreach ( get_sites( array( 'number' => 999999 ) ) as $site ) {
+		$site_id = (int) $site->blog_id;
+
+		// Drop the per-site links table (leftovers from separate mode included).
+		// The main site's "subsite" name is the shared table, dropped below.
+		$subsite_table = Settings::get_subsite_link_table_name( $site_id );
+		if ( $subsite_table !== $shared_table ) {
+			$wpdb->query( "DROP TABLE IF EXISTS `$subsite_table`" ); //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, table names cant be prepared.
+		}
+
+		// Clear per-blog options and post meta in the site's own context.
+		switch_to_blog( $site_id );
+		Settings::clear_all_options();
+		WP_Post_Controller::clear_all_post_meta();
+		restore_current_blog();
+
+		// Remove any pending merge counter for the site.
+		delete_network_option( $network_id, \Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Event\Merge_Duplicate_Links_Batch_Event::counter_option( $site_id ) );
+	}
+
+	// Drop the shared links table.
+	$wpdb->query( "DROP TABLE IF EXISTS `$shared_table`" ); //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, table names cant be prepared.
+
+	// Remove every network-level option the plugin owns.
+	Settings::clear_all_network_options();
 }
 
 

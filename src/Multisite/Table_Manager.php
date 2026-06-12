@@ -14,6 +14,7 @@ namespace Internet_Archive\Wayback_Machine_Link_Fixer\Multisite;
 
 use Internet_Archive\Wayback_Machine_Link_Fixer\Settings\Settings;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Migration\Migrations;
+use Internet_Archive\Wayback_Machine_Link_Fixer_Migration\Migration_1;
 use Internet_Archive\Wayback_Machine_Link_Fixer\Multisite\Event\Merge_Duplicate_Links_Batch_Event;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -96,18 +97,43 @@ class Table_Manager {
 				)
 			);
 		}
+		global $wpdb;
+		$shared_table_name  = Settings::get_shared_multisite_link_table_name();
+		$subsite_table_name = Settings::get_subsite_link_table_name( $site_id );
+
+		// The main site's blog prefix IS the base prefix, so its "separate"
+		// table is the shared-named table. Cloning it would truncate the very
+		// table being cloned from (data loss) — the site already holds the
+		// data under that name; nothing to do.
+		if ( $subsite_table_name === $shared_table_name ) {
+			$this->ensure_table_exists( $shared_table_name );
+			$this->add_log(
+				/* translators: %s: site name */
+				\sprintf( \esc_html__( 'Site %s already uses the shared-named table; nothing to clone.', 'internet-archive-wayback-machine-link-fixer' ), $site_details->blogname ),
+				'success'
+			);
+			return;
+		}
+
+		// The shared (source) table must exist before cloning from it.
+		$this->ensure_table_exists( $shared_table_name );
+
 		// Switch to the site.
 		switch_to_blog( $site_id );
 
 		// Attempt to run the migrations for the site.
 		$this->migrations->multisite_up( $site_id );
 
+		// Self-heal: a stale per-blog migration log (left by the old
+		// wrong-context bookkeeping in multisite_down) can make multisite_up
+		// skip creation while the table is actually missing — force the
+		// migrations to run again in that case.
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $subsite_table_name ) ) !== $subsite_table_name ) {
+			Migrations::multisite_up( $site_id, true );
+		}
+
 		// Empty the table.
 		$this->reset_site_links_table( $site_id );
-
-		global $wpdb;
-		$shared_table_name  = Settings::get_shared_multisite_link_table_name();
-		$subsite_table_name = Settings::get_subsite_link_table_name( $site_id );
 
 		// Clone the data from the shared table to the subsite table.
 		$wpdb->query(
@@ -202,6 +228,22 @@ class Table_Manager {
 		$shared_table_name  = Settings::get_shared_multisite_link_table_name();
 		$subsite_table_name = Settings::get_subsite_link_table_name( $site_id );
 
+		// The main site's blog prefix IS the base prefix, so its "separate"
+		// table is the shared-named table. Its data is already in place, and
+		// the drop-after-merge path would otherwise DROP THE SHARED TABLE.
+		if ( $subsite_table_name === $shared_table_name ) {
+			$this->ensure_table_exists( $shared_table_name );
+			$this->add_log(
+				/* translators: %s: site name */
+				\sprintf( \esc_html__( 'Site %s already uses the shared-named table; nothing to migrate.', 'internet-archive-wayback-machine-link-fixer' ), $site_details->blogname ),
+				'success'
+			);
+			return;
+		}
+
+		// The shared (destination) table must exist before inserting into it.
+		$this->ensure_table_exists( $shared_table_name );
+
 		// Ensure the subsite table exists; if not, nothing to do for this site.
 		$subsite_exists = $wpdb->get_var(
 			$wpdb->prepare( 'SHOW TABLES LIKE %s', $subsite_table_name )
@@ -215,12 +257,22 @@ class Table_Manager {
 			return;
 		}
 
+		// Collect the duplicates BEFORE inserting — rows whose URL already exists
+		// in the shared table. This must run before the insert below, otherwise
+		// the freshly inserted rows match the join and every row is a duplicate.
+		$duplicates = $wpdb->get_results(
+			'SELECT s.url, s.checks, s.is_broken, s.excluded ' //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			. "FROM `$subsite_table_name` s " //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, table names cant be prepared.
+			. "INNER JOIN `$shared_table_name` sh ON sh.url = s.url", //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, table names cant be prepared.
+			ARRAY_A
+		);
+
 		// Insert non-duplicate rows straight into the shared table.
 		$inserted = $wpdb->query(
 			"INSERT INTO `$shared_table_name` (url, archived, is_broken, checks, message, redirect_url, excluded, archive_process) " //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			. "SELECT s.url, s.archived, s.is_broken, s.checks, s.message, s.redirect_url, s.excluded, s.archive_process "
-			. "FROM `$subsite_table_name` s "
-			. "LEFT JOIN `$shared_table_name` sh ON sh.url = s.url "
+			. 'SELECT s.url, s.archived, s.is_broken, s.checks, s.message, s.redirect_url, s.excluded, s.archive_process '
+			. "FROM `$subsite_table_name` s " //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, table names cant be prepared.
+			. "LEFT JOIN `$shared_table_name` sh ON sh.url = s.url " //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, table names cant be prepared.
 			. 'WHERE sh.id IS NULL'
 		);
 
@@ -248,14 +300,6 @@ class Table_Manager {
 			'success'
 		);
 
-		// Collect the duplicates — rows present in subsite whose URL already exists in shared.
-		$duplicates = $wpdb->get_results(
-			"SELECT s.url, s.checks, s.is_broken, s.excluded " //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			. "FROM `$subsite_table_name` s "
-			. "INNER JOIN `$shared_table_name` sh ON sh.url = s.url",
-			ARRAY_A
-		);
-
 		if ( empty( $duplicates ) ) {
 			// No duplicates — drop the subsite table immediately.
 			Migrations::multisite_down( $site_id );
@@ -269,8 +313,8 @@ class Table_Manager {
 
 		// Chunk duplicates and queue merge tasks. Persist per-site counter so the
 		// LAST task to finish drops the subsite table.
-		$chunks       = array_chunk( $duplicates, 50 );
-		$chunk_count  = count( $chunks );
+		$chunks      = array_chunk( $duplicates, 50 );
+		$chunk_count = count( $chunks );
 
 		\update_network_option( 0, Merge_Duplicate_Links_Batch_Event::counter_option( $site_id ), $chunk_count );
 
@@ -315,7 +359,7 @@ class Table_Manager {
 			)
 		) === $table_name ) {
 			// Truncate the table.
-			$wpdb->query( "TRUNCATE TABLE `$table_name`" );
+			$wpdb->query( "TRUNCATE TABLE `$table_name`" ); //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, table names cant be prepared.
 
 			if ( 0 === $site_id ) {
 				$this->add_log(
@@ -336,6 +380,33 @@ class Table_Manager {
 				);
 			}
 		}
+	}
+
+	/**
+	 * Create a links table with the canonical schema if it does not exist.
+	 *
+	 * Used to guarantee the shared table before cloning from or migrating
+	 * into it (it can be missing when the network started per-site activated,
+	 * or after the historic main-site drop bug).
+	 *
+	 * @param string $table_name The table name to ensure.
+	 *
+	 * @return void
+	 */
+	private function ensure_table_exists( string $table_name ): void {
+		global $wpdb;
+
+		if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) ) === $table_name ) {
+			return;
+		}
+
+		( new Migration_1() )->up( $table_name );
+
+		$this->add_log(
+			/* translators: %s: table name */
+			\sprintf( \esc_html__( 'Created missing links table %s.', 'internet-archive-wayback-machine-link-fixer' ), $table_name ),
+			'info'
+		);
 	}
 
 	/**

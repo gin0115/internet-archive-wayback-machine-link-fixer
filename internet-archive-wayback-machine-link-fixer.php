@@ -12,7 +12,7 @@
  * @wordpress-plugin
  * Plugin Name:             Internet Archive Wayback Machine Link Fixer
  * Description:             This plugin scans your content for links, replacing broken ones with archived versions from the Wayback Machine. It also features Auto Archiving, which automatically creates snapshots of your own pages and any other links on your site that aren’t yet archived, ensuring long-term accessibility.
- * Version:                 2.0.0-MS
+ * Version:                 1.4.2
  * Requires at least:       6.4
  * Tested up to:            7.0
  * Requires PHP:            7.4

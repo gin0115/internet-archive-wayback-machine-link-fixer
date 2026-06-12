@@ -40,6 +40,16 @@ update_option( Settings::FIXER_OPTION, Settings::FIXER_OPTION_REPLACE_LINK );
 // a pattern and we'd be testing the wrong code path).
 update_option( Settings::LINK_EXCLUSIONS, array() );
 
+// On multisite the plugin reads settings from NETWORK options
+// (Settings::get_multisite_aware_option), so blog-level writes above are
+// invisible to it — mirror them at network level.
+if ( is_multisite() ) {
+	$iawmlf_network_id = get_current_network_id();
+	update_network_option( $iawmlf_network_id, Settings::FIXER_OPTION, Settings::FIXER_OPTION_REPLACE_LINK );
+	update_network_option( $iawmlf_network_id, Settings::LINK_EXCLUSIONS, array() );
+	update_network_option( $iawmlf_network_id, Settings::PROCESS_LINKS, true );
+}
+
 // Clean up any prior runs (idempotent).
 $wpdb->delete( $links_table, array( 'url' => $excluded_url ), array( '%s' ) );
 $wpdb->delete( $links_table, array( 'url' => $sentinel_url ), array( '%s' ) );
