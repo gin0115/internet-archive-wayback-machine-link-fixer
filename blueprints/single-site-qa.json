@@ -19,7 +19,7 @@
 			"step": "installPlugin",
 			"pluginData": {
 				"resource": "url",
-				"url": "https://cors.wordpress.net/proxy.php?https://github.com/gin0115/internet-archive-wayback-machine-link-fixer/releases/download/qa-preview/internet-archive-wayback-machine-link-fixer.zip"
+				"url": "https://raw.githubusercontent.com/gin0115/internet-archive-wayback-machine-link-fixer/multisite_update-migrations-for-multsite-mode/blueprints/dist/internet-archive-wayback-machine-link-fixer.zip"
 			},
 			"options": {
 				"activate": true
